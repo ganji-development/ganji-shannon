@@ -10,17 +10,19 @@
  * Generic functional composition patterns for async operations.
  */
 
-// biome-ignore lint/suspicious/noExplicitAny: pipeline functions need flexible typing for composition
-type PipelineFunction = (x: unknown) => unknown | Promise<unknown>;
+type PipelineFunction = (x: never) => unknown;
 
 /**
  * Async pipeline that passes result through a series of functions.
  * Clearer than reduce-based pipe and easier to debug.
  */
-export async function asyncPipe<TResult>(initial: unknown, ...fns: PipelineFunction[]): Promise<TResult> {
+export async function asyncPipe<TResult>(
+  initial: unknown,
+  ...fns: PipelineFunction[]
+): Promise<TResult> {
   let result = initial;
   for (const fn of fns) {
-    result = await fn(result);
+    result = await fn(result as never);
   }
   return result as TResult;
 }

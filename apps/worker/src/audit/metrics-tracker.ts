@@ -11,13 +11,13 @@
  * Tracks attempt-level data for complete forensic trail.
  */
 
-import { PentestError } from '../services/error-handling.js';
-import { AGENT_PHASE_MAP, type PhaseName } from '../session-manager.js';
-import { ErrorCode } from '../types/errors.js';
-import type { AgentEndResult, AgentName } from '../types/index.js';
-import { atomicWrite, fileExists, readJson } from '../utils/file-io.js';
-import { calculatePercentage, formatTimestamp } from '../utils/formatting.js';
-import { generateSessionJsonPath, type SessionMetadata } from './utils.js';
+import { PentestError } from "../services/error-handling.js";
+import { AGENT_PHASE_MAP, type PhaseName } from "../session-manager.js";
+import { ErrorCode } from "../types/errors.js";
+import type { AgentEndResult, AgentName } from "../types/index.js";
+import { atomicWrite, fileExists, readJson } from "../utils/file-io.js";
+import { calculatePercentage, formatTimestamp } from "../utils/formatting.js";
+import { generateSessionJsonPath, type SessionMetadata } from "./utils.js";
 
 interface AttemptData {
   attempt_number: number;
@@ -30,7 +30,7 @@ interface AttemptData {
 }
 
 interface AgentAuditMetrics {
-  status: 'in-progress' | 'success' | 'failed';
+  status: "in-progress" | "success" | "failed";
   attempts: AttemptData[];
   final_duration_ms: number;
   total_cost_usd: number;
@@ -57,7 +57,7 @@ interface SessionData {
     id: string;
     webUrl: string;
     repoPath?: string;
-    status: 'in-progress' | 'completed' | 'failed' | 'cancelled' | 'partial';
+    status: "in-progress" | "completed" | "failed" | "cancelled" | "partial";
     createdAt: string;
     completedAt?: string;
     originalWorkflowId?: string; // First workflow that created this workspace
@@ -119,8 +119,10 @@ export class MetricsTracker {
       session: {
         id: this.sessionMetadata.id,
         webUrl: this.sessionMetadata.webUrl,
-        status: 'in-progress',
-        createdAt: (this.sessionMetadata as { createdAt?: string }).createdAt || formatTimestamp(),
+        status: "in-progress",
+        createdAt:
+          (this.sessionMetadata as { createdAt?: string }).createdAt ||
+          formatTimestamp(),
         resumeAttempts: [],
       },
       metrics: {
@@ -159,8 +161,8 @@ export class MetricsTracker {
   async endAgent(agentName: string, result: AgentEndResult): Promise<void> {
     if (!this.data) {
       throw new PentestError(
-        'MetricsTracker not initialized',
-        'validation',
+        "MetricsTracker not initialized",
+        "validation",
         false,
         {},
         ErrorCode.AGENT_EXECUTION_FAILED,
@@ -170,7 +172,7 @@ export class MetricsTracker {
     // 1. Initialize agent metrics if first time seeing this agent
     const existingAgent = this.data.metrics.agents[agentName];
     const agent = existingAgent ?? {
-      status: 'in-progress' as const,
+      status: "in-progress" as const,
       attempts: [],
       final_duration_ms: 0,
       total_cost_usd: 0,
@@ -198,11 +200,14 @@ export class MetricsTracker {
     agent.attempts.push(attempt);
 
     // 4. Recalculate total cost across all attempts (includes failures)
-    agent.total_cost_usd = agent.attempts.reduce((sum, a) => sum + a.cost_usd, 0);
+    agent.total_cost_usd = agent.attempts.reduce(
+      (sum, a) => sum + a.cost_usd,
+      0,
+    );
 
     // 5. Update agent status based on outcome
     if (result.success) {
-      agent.status = 'success';
+      agent.status = "success";
       agent.final_duration_ms = result.duration_ms;
 
       // 6. Attach model and checkpoint metadata on success
@@ -216,7 +221,7 @@ export class MetricsTracker {
     } else {
       // A non-final failed attempt stays in-progress (Temporal will retry); only the
       // terminal attempt (or an unqualified failure) marks the agent failed.
-      agent.status = result.isFinalAttempt === false ? 'in-progress' : 'failed';
+      agent.status = result.isFinalAttempt === false ? "in-progress" : "failed";
     }
 
     // 7. Clear active timer
@@ -232,12 +237,19 @@ export class MetricsTracker {
   /**
    * Update session status
    */
-  async updateSessionStatus(status: 'in-progress' | 'completed' | 'failed' | 'cancelled' | 'partial'): Promise<void> {
+  async updateSessionStatus(
+    status: "in-progress" | "completed" | "failed" | "cancelled" | "partial",
+  ): Promise<void> {
     if (!this.data) return;
 
     this.data.session.status = status;
 
-    if (status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'partial') {
+    if (
+      status === "completed" ||
+      status === "failed" ||
+      status === "cancelled" ||
+      status === "partial"
+    ) {
       this.data.session.completedAt = formatTimestamp();
     }
 
@@ -251,11 +263,15 @@ export class MetricsTracker {
    * @param terminatedWorkflows - IDs of workflows that were terminated
    * @param checkpointHash - Git checkpoint hash that was restored
    */
-  async addResumeAttempt(workflowId: string, terminatedWorkflows: string[], checkpointHash?: string): Promise<void> {
+  async addResumeAttempt(
+    workflowId: string,
+    terminatedWorkflows: string[],
+    checkpointHash?: string,
+  ): Promise<void> {
     if (!this.data) {
       throw new PentestError(
-        'MetricsTracker not initialized',
-        'validation',
+        "MetricsTracker not initialized",
+        "validation",
         false,
         {},
         ErrorCode.AGENT_EXECUTION_FAILED,
@@ -279,7 +295,7 @@ export class MetricsTracker {
     };
 
     if (terminatedWorkflows.length > 0) {
-      resumeAttempt.terminatedPrevious = terminatedWorkflows.join(',');
+      resumeAttempt.terminatedPrevious = terminatedWorkflows.join(",");
     }
 
     if (checkpointHash) {
@@ -300,12 +316,20 @@ export class MetricsTracker {
     const agents = this.data.metrics.agents;
 
     // Only count successful agents
-    const successfulAgents = Object.entries(agents).filter(([, data]) => data.status === 'success');
+    const successfulAgents = Object.entries(agents).filter(
+      ([, data]) => data.status === "success",
+    );
 
     // Calculate total duration and cost
-    const totalDuration = successfulAgents.reduce((sum, [, data]) => sum + data.final_duration_ms, 0);
+    const totalDuration = successfulAgents.reduce(
+      (sum, [, data]) => sum + data.final_duration_ms,
+      0,
+    );
 
-    const totalCost = successfulAgents.reduce((sum, [, data]) => sum + data.total_cost_usd, 0);
+    const totalCost = successfulAgents.reduce(
+      (sum, [, data]) => sum + data.total_cost_usd,
+      0,
+    );
 
     this.data.metrics.total_duration_ms = totalDuration;
     this.data.metrics.total_cost_usd = totalCost;
@@ -317,11 +341,13 @@ export class MetricsTracker {
   /**
    * Calculate phase-level metrics
    */
-  private calculatePhaseMetrics(successfulAgents: Array<[string, AgentAuditMetrics]>): Record<string, PhaseMetrics> {
+  private calculatePhaseMetrics(
+    successfulAgents: Array<[string, AgentAuditMetrics]>,
+  ): Record<string, PhaseMetrics> {
     const phases: Record<PhaseName, AgentAuditMetrics[]> = {
-      'pre-recon': [],
+      "pre-recon": [],
       recon: [],
-      'vulnerability-analysis': [],
+      "vulnerability-analysis": [],
       exploitation: [],
       reporting: [],
     };
@@ -336,14 +362,19 @@ export class MetricsTracker {
 
     // Calculate metrics per phase
     const phaseMetrics: Record<string, PhaseMetrics> = {};
-    // biome-ignore lint/style/noNonNullAssertion: called from recalculateAggregations which guards this.data
     const totalDuration = this.data?.metrics.total_duration_ms ?? 0;
 
     for (const [phaseName, agentList] of Object.entries(phases)) {
       if (agentList.length === 0) continue;
 
-      const phaseDuration = agentList.reduce((sum, agent) => sum + agent.final_duration_ms, 0);
-      const phaseCost = agentList.reduce((sum, agent) => sum + agent.total_cost_usd, 0);
+      const phaseDuration = agentList.reduce(
+        (sum, agent) => sum + agent.final_duration_ms,
+        0,
+      );
+      const phaseCost = agentList.reduce(
+        (sum, agent) => sum + agent.total_cost_usd,
+        0,
+      );
 
       phaseMetrics[phaseName] = {
         duration_ms: phaseDuration,
