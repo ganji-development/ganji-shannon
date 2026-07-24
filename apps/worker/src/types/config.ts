@@ -62,6 +62,15 @@ export interface Authentication {
   success_condition: SuccessCondition;
 }
 
+export type TargetTier = 'public' | 'admin' | 'internal';
+
+export interface TargetEndpoint {
+  name: string;
+  url: string;
+  tier: TargetTier;
+  repo_path?: string;
+}
+
 export interface Config {
   rules?: Rules;
   authentication?: Authentication;
@@ -71,6 +80,7 @@ export interface Config {
   exploit?: 'true' | 'false';
   report?: ReportConfig;
   rules_of_engagement?: string;
+  targets?: TargetEndpoint[];
 }
 
 export type RetryPreset = 'default' | 'subscription';
@@ -89,6 +99,7 @@ export interface DistributedConfig {
   exploit: boolean;
   report: ReportConfig;
   rules_of_engagement: string;
+  targets: TargetEndpoint[];
 }
 
 /**

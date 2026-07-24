@@ -6,12 +6,12 @@
 
 export class ProgressIndicator {
   private message: string;
-  private frames: string[] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  private frames: string[] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
   private frameIndex: number = 0;
   private interval: ReturnType<typeof setInterval> | null = null;
   private isRunning: boolean = false;
 
-  constructor(message: string = 'Working...') {
+  constructor(message: string = "Working...") {
     this.message = message;
   }
 
@@ -37,12 +37,12 @@ export class ProgressIndicator {
     }
 
     // Clear the spinner line
-    process.stdout.write(`\r${' '.repeat(this.message.length + 5)}\r`);
+    process.stdout.write(`\r${" ".repeat(this.message.length + 5)}\r`);
     this.isRunning = false;
   }
 
-  finish(successMessage: string = 'Complete'): void {
+  finish(successMessage: string = "Complete"): void {
     this.stop();
-    console.log(`✓ ${successMessage}`);
+    console.info(`✓ ${successMessage}`);
   }
 }

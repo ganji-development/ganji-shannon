@@ -681,6 +681,7 @@ export const distributeConfig = (config: Config | null): DistributedConfig => {
   };
 
   const rules_of_engagement = config?.rules_of_engagement?.trim() ?? '';
+  const targets = config?.targets || [];
 
   return {
     avoid: avoid.map(sanitizeRule),
@@ -691,6 +692,7 @@ export const distributeConfig = (config: Config | null): DistributedConfig => {
     exploit,
     report,
     rules_of_engagement,
+    targets,
   };
 };
 

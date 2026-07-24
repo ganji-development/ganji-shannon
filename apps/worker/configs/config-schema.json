@@ -187,6 +187,20 @@
       "maxLength": 1000,
       "description": "Free-text instructions to the agent that render into every prompt."
     },
+    "targets": {
+      "type": "array",
+      "description": "Multi-target endpoints topology and security classification tiers",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "url": { "type": "string", "minLength": 1 },
+          "tier": { "type": "string", "enum": ["public", "admin", "internal"] },
+          "repo_path": { "type": "string" }
+        },
+        "required": ["name", "url", "tier"]
+      }
+    },
     "login": {
       "type": "object",
       "description": "Deprecated: Use 'authentication' section instead",
@@ -208,7 +222,8 @@
     { "required": ["vuln_classes"] },
     { "required": ["exploit"] },
     { "required": ["report"] },
-    { "required": ["rules_of_engagement"] }
+    { "required": ["rules_of_engagement"] },
+    { "required": ["targets"] }
   ],
   "additionalProperties": false,
   "$defs": {

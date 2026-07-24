@@ -27,25 +27,43 @@
  *   TEMPORAL_ADDRESS - Temporal server address (default: localhost:7233)
  */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Client, Connection, type WorkflowHandle, WorkflowNotFoundError } from '@temporalio/client';
-import { bundleWorkflowCode, NativeConnection, Worker } from '@temporalio/worker';
-import dotenv from 'dotenv';
-import { sanitizeHostname } from '../audit/utils.js';
-import { parseConfig } from '../config-parser.js';
-import { ASSEMBLED_REPORT_FILENAME, deliverablesDir, FINAL_REPORT_FILENAME, resolveSessionJsonPath } from '../paths.js';
-import type { PipelineConfig, VulnClass } from '../types/config.js';
-import { fileExists, readJson } from '../utils/file-io.js';
-import * as activities from './activities.js';
-import type { PipelineInput, PipelineProgress, PipelineState } from './shared.js';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  Client,
+  Connection,
+  type WorkflowHandle,
+  WorkflowNotFoundError,
+} from "@temporalio/client";
+import {
+  bundleWorkflowCode,
+  NativeConnection,
+  Worker,
+} from "@temporalio/worker";
+import dotenv from "dotenv";
+import { sanitizeHostname } from "../audit/utils.js";
+import { parseConfig } from "../config-parser.js";
+import {
+  ASSEMBLED_REPORT_FILENAME,
+  deliverablesDir,
+  FINAL_REPORT_FILENAME,
+  resolveSessionJsonPath,
+} from "../paths.js";
+import type { PipelineConfig, VulnClass } from "../types/config.js";
+import { fileExists, readJson } from "../utils/file-io.js";
+import * as activities from "./activities.js";
+import type {
+  PipelineInput,
+  PipelineProgress,
+  PipelineState,
+} from "./shared.js";
 
 dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PROGRESS_QUERY = 'getProgress';
+const PROGRESS_QUERY = "getProgress";
 
 // === CLI Argument Parsing ===
 
@@ -60,19 +78,23 @@ interface CliArgs {
 }
 
 function showUsage(): void {
-  console.log('\nShannon Worker');
-  console.log('Combined worker + client for pentest pipeline\n');
-  console.log('Usage:');
-  console.log('  node dist/temporal/worker.js <webUrl> <repoPath> --task-queue <name> [options]\n');
-  console.log('Options:');
-  console.log('  --task-queue <name>    Task queue name (required)');
-  console.log('  --config <path>        Configuration file path');
-  console.log('  --workspace <name>     Resume from existing workspace');
-  console.log('  --pipeline-testing     Use minimal prompts for fast testing\n');
+  console.info("\nShannon Worker");
+  console.info("Combined worker + client for pentest pipeline\n");
+  console.info("Usage:");
+  console.info(
+    "  node dist/temporal/worker.js <webUrl> <repoPath> --task-queue <name> [options]\n",
+  );
+  console.info("Options:");
+  console.info("  --task-queue <name>    Task queue name (required)");
+  console.info("  --config <path>        Configuration file path");
+  console.info("  --workspace <name>     Resume from existing workspace");
+  console.info(
+    "  --pipeline-testing     Use minimal prompts for fast testing\n",
+  );
 }
 
 function parseCliArgs(argv: string[]): CliArgs {
-  if (argv.includes('--help') || argv.includes('-h') || argv.length === 0) {
+  if (argv.includes("--help") || argv.includes("-h") || argv.length === 0) {
     showUsage();
     process.exit(0);
   }
@@ -87,33 +109,33 @@ function parseCliArgs(argv: string[]): CliArgs {
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--task-queue') {
+    if (arg === "--task-queue") {
       const nextArg = argv[i + 1];
-      if (nextArg && !nextArg.startsWith('-')) {
+      if (nextArg && !nextArg.startsWith("-")) {
         taskQueue = nextArg;
         i++;
       }
-    } else if (arg === '--config') {
+    } else if (arg === "--config") {
       const nextArg = argv[i + 1];
-      if (nextArg && !nextArg.startsWith('-')) {
+      if (nextArg && !nextArg.startsWith("-")) {
         configPath = nextArg;
         i++;
       }
-    } else if (arg === '--output') {
+    } else if (arg === "--output") {
       const nextArg = argv[i + 1];
-      if (nextArg && !nextArg.startsWith('-')) {
+      if (nextArg && !nextArg.startsWith("-")) {
         outputPath = nextArg;
         i++;
       }
-    } else if (arg === '--workspace') {
+    } else if (arg === "--workspace") {
       const nextArg = argv[i + 1];
-      if (nextArg && !nextArg.startsWith('-')) {
+      if (nextArg && !nextArg.startsWith("-")) {
         resumeFromWorkspace = nextArg;
         i++;
       }
-    } else if (arg === '--pipeline-testing') {
+    } else if (arg === "--pipeline-testing") {
       pipelineTestingMode = true;
-    } else if (arg && !arg.startsWith('-')) {
+    } else if (arg && !arg.startsWith("-")) {
       if (!webUrl) {
         webUrl = arg;
       } else if (!repoPath) {
@@ -123,13 +145,13 @@ function parseCliArgs(argv: string[]): CliArgs {
   }
 
   if (!webUrl || !repoPath) {
-    console.error('Error: webUrl and repoPath are required');
+    console.error("Error: webUrl and repoPath are required");
     showUsage();
     process.exit(1);
   }
 
   if (!taskQueue) {
-    console.error('Error: --task-queue is required');
+    console.error("Error: --task-queue is required");
     showUsage();
     process.exit(1);
   }
@@ -170,11 +192,19 @@ interface WorkspaceResolution {
   terminatedWorkflows: string[];
 }
 
-async function terminateExistingWorkflows(client: Client, workspaceName: string): Promise<string[]> {
-  const sessionPath = resolveSessionJsonPath(path.join('./workspaces', workspaceName));
+async function terminateExistingWorkflows(
+  client: Client,
+  workspaceName: string,
+): Promise<string[]> {
+  const sessionPath = resolveSessionJsonPath(
+    path.join("./workspaces", workspaceName),
+  );
 
   if (!(await fileExists(sessionPath))) {
-    throw new Error(`Workspace not found: ${workspaceName}\n` + `Expected path: ${sessionPath}`);
+    throw new Error(
+      `Workspace not found: ${workspaceName}\n` +
+        `Expected path: ${sessionPath}`,
+    );
   }
 
   const session = await readJson<SessionJson>(sessionPath);
@@ -191,19 +221,19 @@ async function terminateExistingWorkflows(client: Client, workspaceName: string)
       const handle = client.workflow.getHandle(wfId);
       const description = await handle.describe();
 
-      if (description.status.name === 'RUNNING') {
-        console.log(`Terminating running scan: ${wfId}`);
-        await handle.terminate('Superseded by resume workflow');
+      if (description.status.name === "RUNNING") {
+        console.info(`Terminating running scan: ${wfId}`);
+        await handle.terminate("Superseded by resume workflow");
         terminated.push(wfId);
-        console.log(`Terminated: ${wfId}`);
+        console.info(`Terminated: ${wfId}`);
       } else {
-        console.log(`Scan already ${description.status.name}: ${wfId}`);
+        console.info(`Scan already ${description.status.name}: ${wfId}`);
       }
     } catch (error) {
       if (error instanceof WorkflowNotFoundError) {
-        console.log(`Scan not found (already cleaned up): ${wfId}`);
+        console.info(`Scan not found (already cleaned up): ${wfId}`);
       } else {
-        console.log(`Failed to terminate ${wfId}: ${error}`);
+        console.info(`Failed to terminate ${wfId}: ${error}`);
       }
     }
   }
@@ -211,7 +241,10 @@ async function terminateExistingWorkflows(client: Client, workspaceName: string)
   return terminated;
 }
 
-async function resolveWorkspace(client: Client, args: CliArgs): Promise<WorkspaceResolution> {
+async function resolveWorkspace(
+  client: Client,
+  args: CliArgs,
+): Promise<WorkspaceResolution> {
   if (!args.resumeFromWorkspace) {
     const hostname = sanitizeHostname(args.webUrl);
     const workflowId = `${hostname}_shannon-${Date.now()}`;
@@ -224,21 +257,28 @@ async function resolveWorkspace(client: Client, args: CliArgs): Promise<Workspac
   }
 
   const workspace = args.resumeFromWorkspace;
-  const sessionPath = resolveSessionJsonPath(path.join('./workspaces', workspace));
+  const sessionPath = resolveSessionJsonPath(
+    path.join("./workspaces", workspace),
+  );
   const workspaceExists = await fileExists(sessionPath);
 
   if (workspaceExists) {
-    console.log('=== RESUME MODE ===');
-    console.log(`Workspace: ${workspace}\n`);
+    console.info("=== RESUME MODE ===");
+    console.info(`Workspace: ${workspace}\n`);
 
-    const terminatedWorkflows = await terminateExistingWorkflows(client, workspace);
+    const terminatedWorkflows = await terminateExistingWorkflows(
+      client,
+      workspace,
+    );
     if (terminatedWorkflows.length > 0) {
-      console.log(`Terminated ${terminatedWorkflows.length} previous scan(s)\n`);
+      console.info(
+        `Terminated ${terminatedWorkflows.length} previous scan(s)\n`,
+      );
     }
 
     const session = await readJson<SessionJson>(sessionPath);
     if (session.session.webUrl !== args.webUrl) {
-      console.error('ERROR: URL mismatch with workspace');
+      console.error("ERROR: URL mismatch with workspace");
       console.error(`  Workspace URL: ${session.session.webUrl}`);
       console.error(`  Provided URL:  ${args.webUrl}`);
       process.exit(1);
@@ -254,16 +294,20 @@ async function resolveWorkspace(client: Client, args: CliArgs): Promise<Workspac
 
   if (!isValidWorkspaceName(workspace)) {
     console.error(`ERROR: Invalid workspace name: "${workspace}"`);
-    console.error('  Must be 1-128 characters, alphanumeric/hyphens/underscores, starting with alphanumeric');
+    console.error(
+      "  Must be 1-128 characters, alphanumeric/hyphens/underscores, starting with alphanumeric",
+    );
     process.exit(1);
   }
 
-  console.log('=== NEW NAMED WORKSPACE ===');
-  console.log(`Workspace: ${workspace}\n`);
+  console.info("=== NEW NAMED WORKSPACE ===");
+  console.info(`Workspace: ${workspace}\n`);
 
   // If the workspace name already looks like a CLI-generated ID
   // (ends with _shannon-<digits>), use it directly to avoid double _shannon- suffixes
-  const workflowId = /_shannon-\d+$/.test(workspace) ? workspace : `${workspace}_shannon-${Date.now()}`;
+  const workflowId = /_shannon-\d+$/.test(workspace)
+    ? workspace
+    : `${workspace}_shannon-${Date.now()}`;
 
   return {
     workflowId,
@@ -281,7 +325,9 @@ interface OrchestrationConfig {
   exploit?: boolean;
 }
 
-async function loadOrchestrationConfig(configPath: string | undefined): Promise<OrchestrationConfig> {
+async function loadOrchestrationConfig(
+  configPath: string | undefined,
+): Promise<OrchestrationConfig> {
   if (!configPath) return { pipelineConfig: {} };
   try {
     const config = await parseConfig(configPath);
@@ -291,13 +337,20 @@ async function loadOrchestrationConfig(configPath: string | undefined): Promise<
       pipelineConfig.retry_preset = config.pipeline.retry_preset;
     }
     if (config.pipeline?.max_concurrent_pipelines !== undefined) {
-      pipelineConfig.max_concurrent_pipelines = Number(config.pipeline.max_concurrent_pipelines);
+      pipelineConfig.max_concurrent_pipelines = Number(
+        config.pipeline.max_concurrent_pipelines,
+      );
     }
 
     return {
       pipelineConfig,
-      ...(config.vuln_classes && config.vuln_classes.length > 0 && { vulnClasses: [...config.vuln_classes] }),
-      ...(config.exploit !== undefined && { exploit: config.exploit === 'true' }),
+      ...(config.vuln_classes &&
+        config.vuln_classes.length > 0 && {
+          vulnClasses: [...config.vuln_classes],
+        }),
+      ...(config.exploit !== undefined && {
+        exploit: config.exploit === "true",
+      }),
     };
   } catch (error) {
     // A broken config must fail the run, not silently fall back to empty
@@ -319,12 +372,25 @@ function buildPipelineInput(
     workflowId: workspace.workflowId,
     sessionId: workspace.sessionId,
     ...(args.configPath && { configPath: args.configPath }),
-    ...(args.pipelineTestingMode && { pipelineTestingMode: args.pipelineTestingMode }),
-    ...(workspace.isResume && args.resumeFromWorkspace && { resumeFromWorkspace: args.resumeFromWorkspace }),
-    ...(workspace.terminatedWorkflows.length > 0 && { terminatedWorkflows: workspace.terminatedWorkflows }),
-    ...(Object.keys(orchestration.pipelineConfig).length > 0 && { pipelineConfig: orchestration.pipelineConfig }),
-    ...(orchestration.vulnClasses && { vulnClasses: orchestration.vulnClasses }),
-    ...(orchestration.exploit !== undefined && { exploit: orchestration.exploit }),
+    ...(args.pipelineTestingMode && {
+      pipelineTestingMode: args.pipelineTestingMode,
+    }),
+    ...(workspace.isResume &&
+      args.resumeFromWorkspace && {
+        resumeFromWorkspace: args.resumeFromWorkspace,
+      }),
+    ...(workspace.terminatedWorkflows.length > 0 && {
+      terminatedWorkflows: workspace.terminatedWorkflows,
+    }),
+    ...(Object.keys(orchestration.pipelineConfig).length > 0 && {
+      pipelineConfig: orchestration.pipelineConfig,
+    }),
+    ...(orchestration.vulnClasses && {
+      vulnClasses: orchestration.vulnClasses,
+    }),
+    ...(orchestration.exploit !== undefined && {
+      exploit: orchestration.exploit,
+    }),
   };
 }
 
@@ -338,8 +404,8 @@ async function waitForWorkflowResult(
     try {
       const progress = await handle.query<PipelineProgress>(PROGRESS_QUERY);
       const elapsed = Math.floor(progress.elapsedMs / 1000);
-      console.log(
-        `[${elapsed}s] Phase: ${progress.currentPhase || 'unknown'} | Agent: ${progress.currentAgent || 'none'} | Completed: ${progress.completedAgents.length}/13`,
+      console.info(
+        `[${elapsed}s] Phase: ${progress.currentPhase || "unknown"} | Agent: ${progress.currentAgent || "none"} | Completed: ${progress.completedAgents.length}/13`,
       );
     } catch {
       // Workflow may have completed
@@ -350,19 +416,25 @@ async function waitForWorkflowResult(
     const result = await handle.result();
     clearInterval(progressInterval);
 
-    console.log('\nPipeline completed successfully!');
+    console.info("\nPipeline completed successfully!");
     if (result.summary) {
-      console.log(`Duration: ${Math.floor(result.summary.totalDurationMs / 1000)}s`);
-      console.log(`Agents completed: ${result.summary.agentCount}`);
-      console.log(`Total turns: ${result.summary.totalTurns}`);
-      console.log(`Run cost: $${result.summary.totalCostUsd.toFixed(4)}`);
+      console.info(
+        `Duration: ${Math.floor(result.summary.totalDurationMs / 1000)}s`,
+      );
+      console.info(`Agents completed: ${result.summary.agentCount}`);
+      console.info(`Total turns: ${result.summary.totalTurns}`);
+      console.info(`Run cost: $${result.summary.totalCostUsd.toFixed(4)}`);
 
       if (workspace.isResume) {
         try {
           const session = await readJson<SessionJson>(
-            resolveSessionJsonPath(path.join('./workspaces', workspace.sessionId)),
+            resolveSessionJsonPath(
+              path.join("./workspaces", workspace.sessionId),
+            ),
           );
-          console.log(`Cumulative cost: $${session.metrics.total_cost_usd.toFixed(4)}`);
+          console.info(
+            `Cumulative cost: $${session.metrics.total_cost_usd.toFixed(4)}`,
+          );
         } catch {
           // Non-fatal
         }
@@ -370,7 +442,7 @@ async function waitForWorkflowResult(
     }
   } catch (error) {
     clearInterval(progressInterval);
-    console.error('\nPipeline failed:', error);
+    console.error("\nPipeline failed:", error);
     process.exit(1);
   }
 }
@@ -380,20 +452,20 @@ async function waitForWorkflowResult(
 function copyDeliverables(repoPath: string, outputPath: string): void {
   const outputDir = deliverablesDir(repoPath);
   if (!fs.existsSync(outputDir)) {
-    console.log('No deliverables directory found, skipping copy');
+    console.info("No deliverables directory found, skipping copy");
     return;
   }
 
   const files = fs.readdirSync(outputDir);
   if (files.length === 0) {
-    console.log('No deliverables to copy');
+    console.info("No deliverables to copy");
     return;
   }
 
   fs.mkdirSync(outputPath, { recursive: true });
 
   for (const file of files) {
-    if (file === '.git') continue;
+    if (file === ".git") continue;
     const src = path.join(outputDir, file);
     const dest = path.join(outputPath, file);
     fs.cpSync(src, dest, { recursive: true });
@@ -402,10 +474,13 @@ function copyDeliverables(repoPath: string, outputPath: string): void {
   // Surface the report under its human-facing name alongside the raw deliverables
   const assembledReport = path.join(outputDir, ASSEMBLED_REPORT_FILENAME);
   if (fs.existsSync(assembledReport)) {
-    fs.copyFileSync(assembledReport, path.join(outputPath, FINAL_REPORT_FILENAME));
+    fs.copyFileSync(
+      assembledReport,
+      path.join(outputPath, FINAL_REPORT_FILENAME),
+    );
   }
 
-  console.log(`Copied ${files.length} deliverable(s) to ${outputPath}`);
+  console.info(`Copied ${files.length} deliverable(s) to ${outputPath}`);
 }
 
 // === Main Entry Point ===
@@ -415,8 +490,8 @@ async function run(): Promise<void> {
   const args = parseCliArgs(process.argv.slice(2));
 
   // 2. Connect to Temporal server
-  const address = process.env.TEMPORAL_ADDRESS || 'localhost:7233';
-  console.log(`Connecting to Temporal at ${address}...`);
+  const address = process.env.TEMPORAL_ADDRESS || "localhost:7233";
+  console.info(`Connecting to Temporal at ${address}...`);
 
   const connection = await NativeConnection.connect({ address });
   const clientConnection = await Connection.connect({ address });
@@ -424,14 +499,14 @@ async function run(): Promise<void> {
 
   try {
     // 3. Bundle workflows and create worker on per-invocation task queue
-    console.log('Preparing scan...');
+    console.info("Preparing scan...");
     const workflowBundle = await bundleWorkflowCode({
-      workflowsPath: path.join(__dirname, 'workflows.js'),
+      workflowsPath: path.join(__dirname, "workflows.js"),
     });
 
     const worker = await Worker.create({
       connection,
-      namespace: 'default',
+      namespace: "default",
       workflowBundle,
       activities,
       taskQueue: args.taskQueue,
@@ -447,14 +522,13 @@ async function run(): Promise<void> {
     const workerDone = worker.run();
 
     // 6. Submit workflow to the same task queue
-    const handle = await client.workflow.start<(input: PipelineInput) => Promise<PipelineState>>(
-      'pentestPipelineWorkflow',
-      {
-        taskQueue: args.taskQueue,
-        workflowId: workspace.workflowId,
-        args: [input],
-      },
-    );
+    const handle = await client.workflow.start<
+      (input: PipelineInput) => Promise<PipelineState>
+    >("pentestPipelineWorkflow", {
+      taskQueue: args.taskQueue,
+      workflowId: workspace.workflowId,
+      args: [input],
+    });
 
     // 7. Wait for workflow result
     await waitForWorkflowResult(handle, workspace);
@@ -474,6 +548,6 @@ async function run(): Promise<void> {
 }
 
 run().catch((err) => {
-  console.error('Worker failed:', err);
+  console.error("Worker failed:", err);
   process.exit(1);
 });

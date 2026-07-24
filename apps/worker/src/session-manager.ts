@@ -10,6 +10,14 @@ import type { ActivityLogger } from './types/activity-logger.js';
 import type { AgentDefinition, AgentName, AgentValidator, PlaywrightSession, VulnType } from './types/index.js';
 
 // Agent definitions according to PRD
+// deepseekMode: static default for DeepSeek V4 execution. Agents do NOT dynamically
+// switch modes during a run — this is the mode used for the entire agent session.
+//   flash off  — fast, no reasoning (simple extraction/formatting)
+//   flash high — fast with reasoning (enumeration, pattern matching)
+//   flash max  — fast with deep reasoning (complex analysis without vision)
+//   pro off    — advanced model, no reasoning (structured output, summarization)
+//   pro high   — advanced model with reasoning (code analysis, vulnerability detection)
+//   pro max    — advanced model with deep reasoning (exploitation, architecture analysis)
 export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freeze({
   'pre-recon': {
     name: 'pre-recon',
@@ -18,6 +26,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     promptTemplate: 'pre-recon-code',
     deliverableFilename: 'pre_recon_deliverable.md',
     modelTier: 'large',
+    deepseekMode: 'pro max',       // deep multi-repo architecture analysis
   },
   recon: {
     name: 'recon',
@@ -25,6 +34,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['pre-recon'],
     promptTemplate: 'recon',
     deliverableFilename: 'recon_deliverable.md',
+    deepseekMode: 'pro high',      // pro for Playwright vision/screenshots
   },
   'injection-vuln': {
     name: 'injection-vuln',
@@ -32,6 +42,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['recon'],
     promptTemplate: 'vuln-injection',
     deliverableFilename: 'injection_analysis_deliverable.md',
+    deepseekMode: 'flash max',     // code-only sink tracing, no vision needed
   },
   'xss-vuln': {
     name: 'xss-vuln',
@@ -39,6 +50,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['recon'],
     promptTemplate: 'vuln-xss',
     deliverableFilename: 'xss_analysis_deliverable.md',
+    deepseekMode: 'flash max',     // DOM/context analysis, no vision needed
   },
   'auth-vuln': {
     name: 'auth-vuln',
@@ -46,6 +58,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['recon'],
     promptTemplate: 'vuln-auth',
     deliverableFilename: 'auth_analysis_deliverable.md',
+    deepseekMode: 'pro high',      // auth logic requires deeper model reasoning
   },
   'ssrf-vuln': {
     name: 'ssrf-vuln',
@@ -53,6 +66,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['recon'],
     promptTemplate: 'vuln-ssrf',
     deliverableFilename: 'ssrf_analysis_deliverable.md',
+    deepseekMode: 'flash max',     // network flow tracing, no vision needed
   },
   'authz-vuln': {
     name: 'authz-vuln',
@@ -60,6 +74,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['recon'],
     promptTemplate: 'vuln-authz',
     deliverableFilename: 'authz_analysis_deliverable.md',
+    deepseekMode: 'flash max',     // permission matrix evaluation, no vision
   },
   'injection-exploit': {
     name: 'injection-exploit',
@@ -67,6 +82,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['injection-vuln'],
     promptTemplate: 'exploit-injection',
     deliverableFilename: 'injection_exploitation_evidence.md',
+    deepseekMode: 'pro max',       // craft working exploits, may need browser
   },
   'xss-exploit': {
     name: 'xss-exploit',
@@ -74,6 +90,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['xss-vuln'],
     promptTemplate: 'exploit-xss',
     deliverableFilename: 'xss_exploitation_evidence.md',
+    deepseekMode: 'pro max',       // Playwright DOM injection + screenshot proof
   },
   'auth-exploit': {
     name: 'auth-exploit',
@@ -81,6 +98,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['auth-vuln'],
     promptTemplate: 'exploit-auth',
     deliverableFilename: 'auth_exploitation_evidence.md',
+    deepseekMode: 'pro max',       // auth bypass requires deep reasoning + browser
   },
   'ssrf-exploit': {
     name: 'ssrf-exploit',
@@ -88,6 +106,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['ssrf-vuln'],
     promptTemplate: 'exploit-ssrf',
     deliverableFilename: 'ssrf_exploitation_evidence.md',
+    deepseekMode: 'flash max',     // SSRF payloads are code-only, no vision
   },
   'authz-exploit': {
     name: 'authz-exploit',
@@ -95,6 +114,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['authz-vuln'],
     promptTemplate: 'exploit-authz',
     deliverableFilename: 'authz_exploitation_evidence.md',
+    deepseekMode: 'flash max',     // IDOR/authz bypass is code-only
   },
   report: {
     name: 'report',
@@ -102,6 +122,7 @@ export const AGENTS: Readonly<Record<AgentName, AgentDefinition>> = Object.freez
     prerequisites: ['injection-exploit', 'xss-exploit', 'auth-exploit', 'ssrf-exploit', 'authz-exploit'],
     promptTemplate: 'report-executive',
     deliverableFilename: 'comprehensive_security_assessment_report.md',
+    deepseekMode: 'pro off',       // report synthesis is structured writing, no reasoning needed
   },
 });
 

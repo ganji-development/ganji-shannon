@@ -11,7 +11,7 @@
  */
 
 // biome-ignore lint/suspicious/noExplicitAny: pipeline functions need flexible typing for composition
-type PipelineFunction = (x: any) => any | Promise<any>;
+type PipelineFunction = (x: unknown) => unknown | Promise<unknown>;
 
 /**
  * Async pipeline that passes result through a series of functions.

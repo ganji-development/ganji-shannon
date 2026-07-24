@@ -1,15 +1,15 @@
 /** TOML config writer for ~/.shannon/config.toml. */
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { stringify } from 'smol-toml';
-import { getConfigFile } from '../home.js';
+import fs from "node:fs";
+import path from "node:path";
+import { stringify } from "smol-toml";
+import { getConfigFile } from "../home.js";
 
 // === Types ===
 
 export interface ShannonConfig {
   core?: { adaptive_thinking?: boolean };
-  anthropic?: { api_key?: string; oauth_token?: string };
+  anthropic?: { api_key?: string; oauth_token?: string; base_url?: string };
   custom_base_url?: { base_url?: string; auth_token?: string };
   bedrock?: { use?: boolean; region?: string; token?: string };
   models?: { small?: string; medium?: string; large?: string };

@@ -1,2 +1,7 @@
 packages:
   - "apps/*"
+allowBuilds:
+  '@google/genai': true
+  '@swc/core': true
+  protobufjs: true
+  tree-sitter-bash: true

@@ -88,17 +88,17 @@ const authzFields = {
 
 // === Per-entry schemas (single vulnerability). Entry types derive from these. ===
 
-const injectionEntry = () => Type.Object({ ...baseFields(true), ...injectionFields });
-const xssEntry = () => Type.Object({ ...baseFields(true), ...xssFields });
-const authEntry = () => Type.Object({ ...baseFields(true), ...authFields });
-const ssrfEntry = () => Type.Object({ ...baseFields(true), ...ssrfFields });
-const authzEntry = () => Type.Object({ ...baseFields(true), ...authzFields });
+const _injectionEntry = () => Type.Object({ ...baseFields(true), ...injectionFields });
+const _xssEntry = () => Type.Object({ ...baseFields(true), ...xssFields });
+const _authEntry = () => Type.Object({ ...baseFields(true), ...authFields });
+const _ssrfEntry = () => Type.Object({ ...baseFields(true), ...ssrfFields });
+const _authzEntry = () => Type.Object({ ...baseFields(true), ...authzFields });
 
-export type InjectionFinding = Static<ReturnType<typeof injectionEntry>>;
-export type XssFinding = Static<ReturnType<typeof xssEntry>>;
-export type AuthFinding = Static<ReturnType<typeof authEntry>>;
-export type SsrfFinding = Static<ReturnType<typeof ssrfEntry>>;
-export type AuthzFinding = Static<ReturnType<typeof authzEntry>>;
+export type InjectionFinding = Static<ReturnType<typeof _injectionEntry>>;
+export type XssFinding = Static<ReturnType<typeof _xssEntry>>;
+export type AuthFinding = Static<ReturnType<typeof _authEntry>>;
+export type SsrfFinding = Static<ReturnType<typeof _ssrfEntry>>;
+export type AuthzFinding = Static<ReturnType<typeof _authzEntry>>;
 
 const PER_TYPE_FIELDS: Partial<Record<AgentName, Record<string, ReturnType<typeof optStr>>>> = {
   'injection-vuln': injectionFields,

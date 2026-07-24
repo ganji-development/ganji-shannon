@@ -15,15 +15,18 @@
  *   node save-deliverable.js --type INJECTION_ANALYSIS --file-path deliverables/injection_analysis_deliverable.md
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { DELIVERABLE_FILENAMES, type DeliverableType } from '../types/deliverables.js';
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import {
+  DELIVERABLE_FILENAMES,
+  type DeliverableType,
+} from "../types/deliverables.js";
 
 // === Help ===
 
 function printHelp(): void {
-  const types = Object.keys(DELIVERABLE_FILENAMES).join(', ');
-  console.log(
+  const types = Object.keys(DELIVERABLE_FILENAMES).join(", ");
+  console.info(
     `save-deliverable - save a Shannon pentest deliverable under its canonical filename.
 
 Usage:
@@ -53,19 +56,19 @@ interface ParsedArgs {
 }
 
 function parseArgs(argv: string[]): ParsedArgs {
-  const args: ParsedArgs = { type: '' };
+  const args: ParsedArgs = { type: "" };
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
     const next = argv[i + 1];
 
-    if (arg === '--type' && next) {
+    if (arg === "--type" && next) {
       args.type = next;
       i++;
-    } else if (arg === '--content' && next) {
+    } else if (arg === "--content" && next) {
       args.content = next;
       i++;
-    } else if (arg === '--file-path' && next) {
+    } else if (arg === "--file-path" && next) {
       args.filePath = next;
       i++;
     }
@@ -76,25 +79,32 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 // === File Operations ===
 
-function saveDeliverableFile(targetDir: string, filename: string, content: string): string {
-  const subdir = process.env.SHANNON_DELIVERABLES_SUBDIR || '.shannon/deliverables';
-  const deliverablesDir = join(targetDir, ...subdir.split('/'));
+function saveDeliverableFile(
+  targetDir: string,
+  filename: string,
+  content: string,
+): string {
+  const subdir =
+    process.env.SHANNON_DELIVERABLES_SUBDIR || ".shannon/deliverables";
+  const deliverablesDir = join(targetDir, ...subdir.split("/"));
   const filepath = join(deliverablesDir, filename);
 
   try {
     mkdirSync(deliverablesDir, { recursive: true });
   } catch {
-    throw new Error(`Cannot create deliverables directory at ${deliverablesDir}`);
+    throw new Error(
+      `Cannot create deliverables directory at ${deliverablesDir}`,
+    );
   }
 
-  writeFileSync(filepath, content, 'utf8');
+  writeFileSync(filepath, content, "utf8");
   return filepath;
 }
 
 // === Main ===
 
 function main(): void {
-  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
     printHelp();
     return;
   }
@@ -103,7 +113,13 @@ function main(): void {
 
   // 1. Validate --type
   if (!args.type) {
-    console.log(JSON.stringify({ status: 'error', message: 'Missing required --type argument', retryable: false }));
+    console.info(
+      JSON.stringify({
+        status: "error",
+        message: "Missing required --type argument",
+        retryable: false,
+      }),
+    );
     process.exit(1);
   }
 
@@ -111,8 +127,12 @@ function main(): void {
   const filename = DELIVERABLE_FILENAMES[deliverableType];
 
   if (!filename) {
-    console.log(
-      JSON.stringify({ status: 'error', message: `Unknown deliverable type: ${args.type}`, retryable: false }),
+    console.info(
+      JSON.stringify({
+        status: "error",
+        message: `Unknown deliverable type: ${args.type}`,
+        retryable: false,
+      }),
     );
     process.exit(1);
   }
@@ -127,24 +147,34 @@ function main(): void {
     const cwd = process.cwd();
     const resolved = resolve(cwd, args.filePath);
     if (!resolved.startsWith(`${cwd}/`) && resolved !== cwd) {
-      console.log(
-        JSON.stringify({ status: 'error', message: `Path traversal detected: ${args.filePath}`, retryable: false }),
+      console.info(
+        JSON.stringify({
+          status: "error",
+          message: `Path traversal detected: ${args.filePath}`,
+          retryable: false,
+        }),
       );
       process.exit(1);
     }
 
     try {
-      content = readFileSync(resolved, 'utf8');
+      content = readFileSync(resolved, "utf8");
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      console.log(JSON.stringify({ status: 'error', message: `Failed to read file: ${msg}`, retryable: true }));
+      console.info(
+        JSON.stringify({
+          status: "error",
+          message: `Failed to read file: ${msg}`,
+          retryable: true,
+        }),
+      );
       process.exit(1);
     }
   } else {
-    console.log(
+    console.info(
       JSON.stringify({
-        status: 'error',
-        message: 'Either --content or --file-path is required',
+        status: "error",
+        message: "Either --content or --file-path is required",
         retryable: false,
       }),
     );
@@ -155,10 +185,16 @@ function main(): void {
   try {
     const targetDir = process.cwd();
     const filepath = saveDeliverableFile(targetDir, filename, content);
-    console.log(JSON.stringify({ status: 'success', filepath }));
+    console.info(JSON.stringify({ status: "success", filepath }));
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.log(JSON.stringify({ status: 'error', message: `Failed to save: ${msg}`, retryable: true }));
+    console.info(
+      JSON.stringify({
+        status: "error",
+        message: `Failed to save: ${msg}`,
+        retryable: true,
+      }),
+    );
     process.exit(1);
   }
 }

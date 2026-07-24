@@ -16,16 +16,16 @@
  *   generate-totp --secret JBSWY3DPEHPK3PXP
  */
 
-import { createHmac } from 'node:crypto';
+import { createHmac } from "node:crypto";
 
 // === Base32 Decoding ===
 
 function base32Decode(encoded: string): Buffer {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-  const cleanInput = encoded.toUpperCase().replace(/[^A-Z2-7]/g, '');
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const cleanInput = encoded.toUpperCase().replace(/[^A-Z2-7]/g, "");
 
   if (cleanInput.length === 0) {
-    throw new Error('TOTP secret is empty after cleaning');
+    throw new Error("TOTP secret is empty after cleaning");
   }
 
   const output: number[] = [];
@@ -52,7 +52,11 @@ function base32Decode(encoded: string): Buffer {
 
 // === TOTP Generation (RFC 6238) ===
 
-function generateHOTP(secret: string, counter: number, digits: number = 6): string {
+function generateHOTP(
+  secret: string,
+  counter: number,
+  digits: number = 6,
+): string {
   const key = base32Decode(secret);
 
   // Convert counter to 8-byte buffer (big-endian)
@@ -60,7 +64,7 @@ function generateHOTP(secret: string, counter: number, digits: number = 6): stri
   counterBuffer.writeBigUInt64BE(BigInt(counter));
 
   // Generate HMAC-SHA1
-  const hmac = createHmac('sha1', key);
+  const hmac = createHmac("sha1", key);
   hmac.update(counterBuffer);
   const hash = hmac.digest();
 
@@ -73,10 +77,14 @@ function generateHOTP(secret: string, counter: number, digits: number = 6): stri
     (((hash[offset + 2] ?? 0) & 0xff) << 8) |
     ((hash[offset + 3] ?? 0) & 0xff);
 
-  return (code % 10 ** digits).toString().padStart(digits, '0');
+  return (code % 10 ** digits).toString().padStart(digits, "0");
 }
 
-function generateTOTP(secret: string, timeStep: number = 30, digits: number = 6): string {
+function generateTOTP(
+  secret: string,
+  timeStep: number = 30,
+  digits: number = 6,
+): string {
   const counter = Math.floor(Date.now() / 1000 / timeStep);
   return generateHOTP(secret, counter, digits);
 }
@@ -84,7 +92,7 @@ function generateTOTP(secret: string, timeStep: number = 30, digits: number = 6)
 // === Help ===
 
 function printHelp(): void {
-  console.log(
+  console.info(
     `generate-totp - emit a current 6-digit TOTP code for a base32-encoded secret.
 
 Usage:
@@ -106,17 +114,17 @@ Output:
 function parseSecret(argv: string[]): string {
   for (let i = 2; i < argv.length; i++) {
     const next = argv[i + 1];
-    if (argv[i] === '--secret' && next) {
+    if (argv[i] === "--secret" && next) {
       return next;
     }
   }
-  return '';
+  return "";
 }
 
 // === Main ===
 
 function main(): void {
-  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
     printHelp();
     return;
   }
@@ -124,20 +132,26 @@ function main(): void {
   const secret = parseSecret(process.argv);
 
   if (!secret) {
-    console.log(JSON.stringify({ status: 'error', message: 'Missing required --secret argument', retryable: false }));
+    console.info(
+      JSON.stringify({
+        status: "error",
+        message: "Missing required --secret argument",
+        retryable: false,
+      }),
+    );
     process.exit(1);
   }
 
   // Strip base32 padding ('=') and whitespace so grouped/padded secrets
   // (e.g. "JBSW Y3DP" or "...PXP=") pass validation instead of being rejected.
-  const normalizedSecret = secret.replace(/[=\s]/g, '');
+  const normalizedSecret = secret.replace(/[=\s]/g, "");
 
   const base32Regex = /^[A-Z2-7]+$/i;
   if (!base32Regex.test(normalizedSecret)) {
-    console.log(
+    console.info(
       JSON.stringify({
-        status: 'error',
-        message: 'Secret must be base32-encoded (characters A-Z and 2-7)',
+        status: "error",
+        message: "Secret must be base32-encoded (characters A-Z and 2-7)",
         retryable: false,
       }),
     );
@@ -148,16 +162,22 @@ function main(): void {
     const totpCode = generateTOTP(normalizedSecret);
     const expiresIn = 30 - (Math.floor(Date.now() / 1000) % 30);
 
-    console.log(
+    console.info(
       JSON.stringify({
-        status: 'success',
+        status: "success",
         totpCode,
         expiresIn,
       }),
     );
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.log(JSON.stringify({ status: 'error', message: `TOTP generation failed: ${msg}`, retryable: false }));
+    console.info(
+      JSON.stringify({
+        status: "error",
+        message: `TOTP generation failed: ${msg}`,
+        retryable: false,
+      }),
+    );
     process.exit(1);
   }
 }

@@ -6,8 +6,8 @@
 
 // Production agent execution on the pi harness, with git checkpoints and audit logging.
 
-import os from 'node:os';
-import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import os from "node:os";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
   type AgentSessionEvent,
   createAgentSession,
@@ -19,53 +19,69 @@ import {
   SettingsManager,
   type Skill,
   type ToolDefinition,
-} from '@earendil-works/pi-coding-agent';
-import { fs, path } from 'zx';
-import type { AuditSession } from '../../audit/index.js';
-import { BASH_TIMEOUT_EXTENSION_DIR, deliverablesDir } from '../../paths.js';
-import { isRetryableError, PentestError } from '../../services/error-handling.js';
-import { AGENT_VALIDATORS } from '../../session-manager.js';
-import type { ActivityLogger } from '../../types/activity-logger.js';
-import { ErrorCode } from '../../types/errors.js';
-import { isSpendingCapBehavior, matchesBillingTextPattern } from '../../utils/billing-detection.js';
-import { isBrowserAgent } from '../../utils/browser-agents.js';
-import { formatTimestamp } from '../../utils/formatting.js';
-import { Timer } from '../../utils/metrics.js';
-import { createAuditLogger } from '../audit-logger.js';
-import { type ModelTier, resolveModelSelection } from '../models.js';
+} from "@earendil-works/pi-coding-agent";
+import { fs, path } from "zx";
+import type { AuditSession } from "../../audit/index.js";
+import { BASH_TIMEOUT_EXTENSION_DIR, deliverablesDir } from "../../paths.js";
+import {
+  isRetryableError,
+  PentestError,
+} from "../../services/error-handling.js";
+import { AGENT_VALIDATORS } from "../../session-manager.js";
+import type { ActivityLogger } from "../../types/activity-logger.js";
+import { ErrorCode } from "../../types/errors.js";
+import {
+  isSpendingCapBehavior,
+  matchesBillingTextPattern,
+} from "../../utils/billing-detection.js";
+import { isBrowserAgent } from "../../utils/browser-agents.js";
+import { formatTimestamp } from "../../utils/formatting.js";
+import { Timer } from "../../utils/metrics.js";
+import { createAuditLogger } from "../audit-logger.js";
+import { type ModelTier, resolveModelSelection } from "../models.js";
 import {
   detectExecutionContext,
   formatAssistantOutput,
   formatCompletionMessage,
   formatErrorOutput,
   formatToolCall,
-} from '../output-formatters.js';
-import { createProgressManager } from '../progress-manager.js';
-import type { CapturedSubmitTool } from '../submit-tool.js';
-import { permissionSystemConfigExists, permissionSystemPackageDir } from './permission-system.js';
-import { createGlobTool, createTodoWriteTool } from './session-tools.js';
-import { createTaskTool } from './task-tool.js';
+} from "../output-formatters.js";
+import { createProgressManager } from "../progress-manager.js";
+import type { CapturedSubmitTool } from "../submit-tool.js";
+import {
+  permissionSystemConfigExists,
+  permissionSystemPackageDir,
+} from "./permission-system.js";
+import { createGlobTool, createTodoWriteTool } from "./session-tools.js";
+import { createTaskTool } from "./task-tool.js";
 
 declare global {
   var SHANNON_DISABLE_LOADER: boolean | undefined;
 }
 
 /** Built-in pi tools enabled for every agent (custom tool names are appended). */
-const BUILTIN_TOOLS = ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'];
+const BUILTIN_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 
 /** Build the playwright-cli Skill object injected for browser-using agents. */
 function buildPlaywrightSkill(): Skill {
   const filePath =
-    process.env.PLAYWRIGHT_CLI_SKILL_PATH ?? path.join(os.homedir(), '.claude/skills/playwright-cli/SKILL.md');
+    process.env.PLAYWRIGHT_CLI_SKILL_PATH ??
+    path.join(os.homedir(), ".claude/skills/playwright-cli/SKILL.md");
   const baseDir = path.dirname(filePath);
   return {
-    name: 'playwright-cli',
+    name: "playwright-cli",
     description:
-      'Drive a real browser via the playwright-cli binary. Use for any task that navigates, clicks, ' +
-      'fills forms, takes screenshots, or reads live pages.',
+      "Drive a real browser via the playwright-cli binary. Use for any task that navigates, clicks, " +
+      "fills forms, takes screenshots, or reads live pages.",
     filePath,
     baseDir,
-    sourceInfo: { path: filePath, source: 'custom', scope: 'user', origin: 'top-level', baseDir },
+    sourceInfo: {
+      path: filePath,
+      source: "custom",
+      scope: "user",
+      origin: "top-level",
+      baseDir,
+    },
     disableModelInvocation: false,
   };
 }
@@ -82,7 +98,7 @@ async function buildResourceLoader(
       additionalExtensionPaths.push(permissionSystemPackageDir());
     } catch {
       logger.warn(
-        'code_path deny config present but @gotgenes/pi-permission-system not resolvable — skipping enforcement',
+        "code_path deny config present but @gotgenes/pi-permission-system not resolvable — skipping enforcement",
       );
     }
   }
@@ -123,7 +139,7 @@ export interface PiPromptResult {
 
 function outputLines(lines: string[]): void {
   for (const line of lines) {
-    console.log(line);
+    console.info(line);
   }
 }
 
@@ -136,12 +152,22 @@ async function writeErrorLog(
   try {
     const errorLog = {
       timestamp: formatTimestamp(),
-      agent: 'pi-executor',
-      error: { name: err.constructor.name, message: err.message, code: err.code, status: err.status, stack: err.stack },
-      context: { sourceDir, prompt: `${fullPrompt.slice(0, 200)}...`, retryable: isRetryableError(err) },
+      agent: "pi-executor",
+      error: {
+        name: err.constructor.name,
+        message: err.message,
+        code: err.code,
+        status: err.status,
+        stack: err.stack,
+      },
+      context: {
+        sourceDir,
+        prompt: `${fullPrompt.slice(0, 200)}...`,
+        retryable: isRetryableError(err),
+      },
       duration,
     };
-    const logPath = path.join(deliverablesDir(sourceDir), 'error.log');
+    const logPath = path.join(deliverablesDir(sourceDir), "error.log");
     await fs.appendFile(logPath, `${JSON.stringify(errorLog)}\n`);
   } catch {
     // Best-effort error log writing - don't propagate failures
@@ -156,21 +182,28 @@ export async function validateAgentOutput(
 ): Promise<boolean> {
   logger.info(`Validating ${agentName} agent output`);
   try {
-    if (!result.success || (!result.result && result.structuredOutput === undefined)) {
-      logger.error('Validation failed: Agent execution was unsuccessful');
+    if (
+      !result.success ||
+      (!result.result && result.structuredOutput === undefined)
+    ) {
+      logger.error("Validation failed: Agent execution was unsuccessful");
       return false;
     }
-    const validator = agentName ? AGENT_VALIDATORS[agentName as keyof typeof AGENT_VALIDATORS] : undefined;
+    const validator = agentName
+      ? AGENT_VALIDATORS[agentName as keyof typeof AGENT_VALIDATORS]
+      : undefined;
     if (!validator) {
-      logger.warn(`No validator found for agent "${agentName}" - assuming success`);
+      logger.warn(
+        `No validator found for agent "${agentName}" - assuming success`,
+      );
       return true;
     }
     logger.info(`Using validator for agent: ${agentName}`, { sourceDir });
     const validationResult = await validator(sourceDir, logger);
     if (validationResult) {
-      logger.info('Validation passed: Required files/structure present');
+      logger.info("Validation passed: Required files/structure present");
     } else {
-      logger.error('Validation failed: Missing required deliverable files');
+      logger.error("Validation failed: Missing required deliverable files");
     }
     return validationResult;
   } catch (error) {
@@ -182,12 +215,12 @@ export async function validateAgentOutput(
 
 /** Concatenate the text blocks of an assistant message (skips thinking + tool calls). */
 function extractAssistantText(message: AgentMessage): string {
-  if (message.role !== 'assistant') return '';
+  if (message.role !== "assistant") return "";
   const blocks = message.content as Array<{ type: string; text?: string }>;
   return blocks
-    .filter((c) => c.type === 'text')
-    .map((c) => c.text ?? '')
-    .join('\n');
+    .filter((c) => c.type === "text")
+    .map((c) => c.text ?? "")
+    .join("\n");
 }
 
 /**
@@ -200,14 +233,14 @@ function classifyErrorText(content: string): PentestError | null {
   if (matchesBillingTextPattern(content)) {
     return new PentestError(
       `Billing limit reached: ${content.slice(0, 100)}`,
-      'billing',
+      "billing",
       true,
       {},
       ErrorCode.SPENDING_CAP_REACHED,
     );
   }
-  if (content.toLowerCase().includes('session limit reached')) {
-    return new PentestError('Session limit reached', 'billing', false);
+  if (content.toLowerCase().includes("session limit reached")) {
+    return new PentestError("Session limit reached", "billing", false);
   }
   return null;
 }
@@ -217,12 +250,12 @@ function classifyErrorText(content: string): PentestError | null {
 export async function runPiPrompt(
   prompt: string,
   sourceDir: string,
-  context: string = '',
-  description: string = 'Agent analysis',
+  context: string = "",
+  description: string = "Agent analysis",
   agentName: string | null = null,
   auditSession: AuditSession | null = null,
   logger: ActivityLogger,
-  modelTier: ModelTier = 'medium',
+  modelTier: ModelTier = "medium",
   callerTools?: ToolDefinition[],
   deliverablesSubdir?: string,
   cancellationSignal?: AbortSignal,
@@ -230,9 +263,13 @@ export async function runPiPrompt(
 ): Promise<PiPromptResult> {
   // 1. Initialize timing and prompt. A submit tool appends its directive so the
   //    instruction to call it lives with the tool, not in every prompt file.
-  const timer = new Timer(`agent-${description.toLowerCase().replace(/\s+/g, '-')}`);
+  const timer = new Timer(
+    `agent-${description.toLowerCase().replace(/\s+/g, "-")}`,
+  );
   const basePrompt = context ? `${context}\n\n${prompt}` : prompt;
-  const fullPrompt = submitTool?.directive ? basePrompt + submitTool.directive : basePrompt;
+  const fullPrompt = submitTool?.directive
+    ? basePrompt + submitTool.directive
+    : basePrompt;
 
   // 2. Set up progress and audit infrastructure
   const execContext = detectExecutionContext(description);
@@ -248,22 +285,37 @@ export async function runPiPrompt(
   //    environment pi's bash tool inherits. These are constant per container, so
   //    setting them on process.env is parallel-safe across this workflow's agents.
   process.env.PLAYWRIGHT_MCP_OUTPUT_DIR = deliverablesSubdir
-    ? path.join(sourceDir, path.dirname(deliverablesSubdir), '.playwright-cli')
-    : path.join(sourceDir, '.shannon', '.playwright-cli');
-  if (deliverablesSubdir) process.env.SHANNON_DELIVERABLES_SUBDIR = deliverablesSubdir;
+    ? path.join(sourceDir, path.dirname(deliverablesSubdir), ".playwright-cli")
+    : path.join(sourceDir, ".shannon", ".playwright-cli");
+  if (deliverablesSubdir)
+    process.env.SHANNON_DELIVERABLES_SUBDIR = deliverablesSubdir;
 
   // 4. Resolve model + auth, then assemble the tool set (universal task/todo tools
   //    plus any caller-supplied collector/submit tools).
-  const selection = resolveModelSelection((auth) => ModelRegistry.create(auth), modelTier);
-  const resourceLoader = await buildResourceLoader(sourceDir, logger, agentName);
+  const selection = resolveModelSelection(
+    (auth) => ModelRegistry.create(auth),
+    modelTier,
+    agentName,
+  );
+  const childSelection = resolveModelSelection(
+    (auth) => ModelRegistry.create(auth),
+    modelTier,
+    agentName,
+    true,
+  );
+  const resourceLoader = await buildResourceLoader(
+    sourceDir,
+    logger,
+    agentName,
+  );
   // Accumulates usage from in-process `task` child sessions so the parent's reported
   // cost includes sub-agent spend (their getSessionStats is separate from ours).
   const childUsage = { cost: 0, inputTokens: 0, outputTokens: 0 };
   const customTools: ToolDefinition[] = [
     createTaskTool({
-      model: selection.model,
-      thinkingLevel: selection.thinkingLevel,
-      authStorage: selection.authStorage,
+      model: childSelection.model,
+      thinkingLevel: childSelection.thinkingLevel,
+      authStorage: childSelection.authStorage,
       cwd: sourceDir,
       onUsage: (usage) => {
         childUsage.cost += usage.cost;
@@ -298,35 +350,44 @@ export async function runPiPrompt(
       sessionManager: SessionManager.inMemory(),
       // Temporal owns retry; pi compaction stays on (no analog previously, guards
       // against context overflow on long agent runs).
-      settingsManager: SettingsManager.inMemory({ retry: { enabled: false }, compaction: { enabled: true } }),
+      settingsManager: SettingsManager.inMemory({
+        retry: { enabled: false },
+        compaction: { enabled: true },
+      }),
       resourceLoader,
     });
 
     // 5. Map pi events to audit logging + progress + error capture.
     session.subscribe((event: AgentSessionEvent) => {
       switch (event.type) {
-        case 'turn_end': {
+        case "turn_end": {
           turnCount += 1;
           const msg = event.message;
           const text = extractAssistantText(msg);
           if (text.trim()) {
             void auditLogger.logLlmResponse(turnCount, text);
             progress.stop();
-            outputLines(formatAssistantOutput(text, execContext, turnCount, description));
+            outputLines(
+              formatAssistantOutput(text, execContext, turnCount, description),
+            );
             progress.start();
             const billing = classifyErrorText(text);
             if (billing) pendingError = billing;
           }
-          if (msg.role === 'assistant' && msg.stopReason === 'error') {
+          if (msg.role === "assistant" && msg.stopReason === "error") {
             apiErrorDetected = true;
             pendingError =
               pendingError ??
-              classifyErrorText(msg.errorMessage ?? '') ??
-              new PentestError(`Agent error: ${(msg.errorMessage ?? 'unknown').slice(0, 200)}`, 'unknown', true);
+              classifyErrorText(msg.errorMessage ?? "") ??
+              new PentestError(
+                `Agent error: ${(msg.errorMessage ?? "unknown").slice(0, 200)}`,
+                "unknown",
+                true,
+              );
           }
           break;
         }
-        case 'tool_execution_start': {
+        case "tool_execution_start": {
           void auditLogger.logToolStart(event.toolName, event.args);
           const toolLines = formatToolCall(
             event.toolName,
@@ -341,15 +402,19 @@ export async function runPiPrompt(
           }
           break;
         }
-        case 'tool_execution_end':
+        case "tool_execution_end":
           void auditLogger.logToolEnd(event.result);
           break;
-        case 'compaction_end':
+        case "compaction_end":
           if (!event.aborted && !event.willRetry && event.errorMessage) {
             pendingError =
               pendingError ??
               classifyErrorText(event.errorMessage) ??
-              new PentestError(`Context compaction failed: ${event.errorMessage.slice(0, 200)}`, 'unknown', true);
+              new PentestError(
+                `Context compaction failed: ${event.errorMessage.slice(0, 200)}`,
+                "unknown",
+                true,
+              );
           }
           break;
         default:
@@ -370,16 +435,18 @@ export async function runPiPrompt(
     const result = session.getLastAssistantText() ?? null;
 
     // 9. Defense-in-depth: detect a spending cap that produced an empty/cheap run.
-    if (isSpendingCapBehavior(turnCount, totalCost, result || '')) {
+    if (isSpendingCapBehavior(turnCount, totalCost, result || "")) {
       throw new PentestError(
         `Spending cap likely reached (turns=${turnCount}, cost=$0): ${result?.slice(0, 100)}`,
-        'billing',
+        "billing",
         true,
       );
     }
 
     const duration = timer.stop();
-    progress.finish(formatCompletionMessage(execContext, description, turnCount, duration));
+    progress.finish(
+      formatCompletionMessage(execContext, description, turnCount, duration),
+    );
 
     // Capture the submit tool's structured payload so callers read it off the
     // result instead of holding a reference to the tool.
@@ -402,7 +469,16 @@ export async function runPiPrompt(
     const err = error as Error & { code?: string; status?: number };
     await auditLogger.logError(err, duration, turnCount);
     progress.stop();
-    outputLines(formatErrorOutput(err, execContext, description, duration, sourceDir, isRetryableError(err)));
+    outputLines(
+      formatErrorOutput(
+        err,
+        execContext,
+        description,
+        duration,
+        sourceDir,
+        isRetryableError(err),
+      ),
+    );
     await writeErrorLog(err, sourceDir, fullPrompt, duration);
 
     return {

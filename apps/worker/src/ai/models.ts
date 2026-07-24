@@ -5,27 +5,24 @@
 // as published by the Free Software Foundation.
 
 /**
- * Model tier definitions and resolution for the pi harness.
+ * Model resolution for the pi harness.
  *
- * Three tiers mapped to capability levels:
- * - "small"  (Haiku — summarization, structured extraction)
- * - "medium" (Sonnet — tool use, general analysis)
- * - "large"  (Opus — deep reasoning, complex analysis)
+ * Anthropic providers use three tiers (small/medium/large) mapped to Claude models.
+ * DeepSeek V4 uses 6 explicit operational modes defined per-agent:
+ *   flash off, flash high, flash max, pro off, pro high, pro max
  *
- * Users override per tier via ANTHROPIC_SMALL_MODEL / ANTHROPIC_MEDIUM_MODEL /
- * ANTHROPIC_LARGE_MODEL, which works across all providers (Anthropic, Bedrock,
- * custom base URL).
+ * Each agent's deepseekMode is declared in its AgentDefinition (session-manager.ts).
+ * resolveModelSelection() reads the agent's mode directly — no tier-based env vars.
  *
- * The active provider is chosen from the env-var contract the CLI forwards
- * (`CLAUDE_CODE_USE_BEDROCK`, `ANTHROPIC_BASE_URL`+`ANTHROPIC_AUTH_TOKEN`, else
- * direct Anthropic). Resolution returns a pi `Model` via `ModelRegistry.find`, the
- * `thinkingLevel`, and an `AuthStorage` primed with the right credential. Bedrock
- * authenticates from the AWS_ env vars via pi-ai.
+ * Provider detection: DEEPSEEK_API_KEY → DeepSeek; CLAUDE_CODE_USE_BEDROCK → Bedrock;
+ * ANTHROPIC_BASE_URL+ANTHROPIC_AUTH_TOKEN → custom base URL; else direct Anthropic.
  */
 
 import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
 import type { Api, Model } from '@earendil-works/pi-ai';
 import { AuthStorage, type ModelRegistry } from '@earendil-works/pi-coding-agent';
+import type { DeepSeekExecutionState } from '../types/agents.js';
+import { AGENTS } from '../session-manager.js';
 
 export type ModelTier = 'small' | 'medium' | 'large';
 
@@ -34,6 +31,7 @@ const DEFAULT_MODELS: Readonly<Record<ModelTier, string>> = {
   medium: 'claude-sonnet-4-6',
   large: 'claude-opus-4-8',
 };
+
 
 export interface EffectiveProvider {
   /** pi-ai provider id: 'anthropic' or 'amazon-bedrock'. */
@@ -46,12 +44,21 @@ export interface EffectiveProvider {
 
 /**
  * Determine the active provider + auth from the env-var contract the CLI forwards:
+ * `DEEPSEEK_API_KEY` → direct DeepSeek Anthropic-compatible endpoint;
  * `CLAUDE_CODE_USE_BEDROCK` → Bedrock; `ANTHROPIC_BASE_URL`+`ANTHROPIC_AUTH_TOKEN`
  * → custom base URL; else direct Anthropic (`ANTHROPIC_API_KEY`, or
- * `CLAUDE_CODE_OAUTH_TOKEN`). Bedrock authenticates from the AWS_ env vars via
- * pi-ai, so it needs no anthropic token.
+ * `CLAUDE_CODE_OAUTH_TOKEN`).
  */
 export function resolveEffectiveProvider(): EffectiveProvider {
+  // DeepSeek API — direct Anthropic-compatible endpoint
+  if (process.env.DEEPSEEK_API_KEY) {
+    return {
+      providerId: 'anthropic',
+      baseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com/anthropic',
+      anthropicToken: process.env.DEEPSEEK_API_KEY,
+    };
+  }
+
   // Bedrock — env flag.
   if (process.env.CLAUDE_CODE_USE_BEDROCK === '1') {
     return { providerId: 'amazon-bedrock' };
@@ -73,7 +80,7 @@ export function resolveEffectiveProvider(): EffectiveProvider {
   return eff;
 }
 
-/** Resolve a model tier to a concrete model ID (env override → default). */
+/** Resolve a model tier to a concrete model ID (env override → default). For Anthropic only. */
 export function resolveModelId(tier: ModelTier = 'medium'): string {
   switch (tier) {
     case 'small':
@@ -85,17 +92,36 @@ export function resolveModelId(tier: ModelTier = 'medium'): string {
   }
 }
 
-/** Whether a model supports adaptive thinking. Opus 4.6, 4.7, and 4.8 only. */
+// DeepSeekExecutionState type is defined in types/agents.ts and imported above.
+
+/** Parse any of the 6 explicit DeepSeek operational modes into concrete modelId and thinkingLevel. */
+export function parseDeepSeekOperatingMode(mode: DeepSeekExecutionState | string): { modelId: string; thinkingLevel: ThinkingLevel } {
+  const normalized = (typeof mode === 'string' ? mode : '').toLowerCase().trim();
+  switch (normalized) {
+    case 'flash off':
+      return { modelId: 'deepseek-v4-flash', thinkingLevel: 'off' };
+    case 'flash high':
+      return { modelId: 'deepseek-v4-flash', thinkingLevel: 'high' as ThinkingLevel };
+    case 'flash max':
+      return { modelId: 'deepseek-v4-flash', thinkingLevel: 'max' as ThinkingLevel };
+    case 'pro off':
+      return { modelId: 'deepseek-v4-pro', thinkingLevel: 'off' };
+    case 'pro high':
+      return { modelId: 'deepseek-v4-pro', thinkingLevel: 'high' as ThinkingLevel };
+    case 'pro max':
+    default:
+      return { modelId: 'deepseek-v4-pro', thinkingLevel: 'max' as ThinkingLevel };
+  }
+}
+
+/** Whether a model supports adaptive thinking. Opus 4.6/4.7/4.8 and DeepSeek V4 models. */
 export function supportsAdaptiveThinking(model: string): boolean {
-  return /opus-4-[678]/.test(model);
+  return /opus-4-[678]/.test(model) || /deepseek/i.test(model);
 }
 
 /**
- * Resolve the thinking level for a run.
- *
- * Adaptive thinking is enabled only on capable models (Opus 4.6/4.7/4.8), mapped to
- * pi's 'medium' level; every other model runs with thinking 'off'. The
- * CLAUDE_ADAPTIVE_THINKING=false kill switch forces 'off' regardless of model.
+ * Resolve thinking level for a given Anthropic model. DeepSeek thinking is resolved
+ * directly via parseDeepSeekOperatingMode() from the agent's deepseekMode — not here.
  */
 export function resolveThinkingLevel(modelId: string): ThinkingLevel {
   if (process.env.CLAUDE_ADAPTIVE_THINKING === 'false') return 'off';
@@ -119,9 +145,44 @@ export interface ModelSelection {
 export function resolveModelSelection(
   registryFactory: (authStorage: AuthStorage) => ModelRegistry,
   modelTier: ModelTier,
+  agentName?: string | null,
+  isChildTask?: boolean,
 ): ModelSelection {
   const eff = resolveEffectiveProvider();
-  const modelId = resolveModelId(modelTier);
+  const isDeepSeek = !!process.env.DEEPSEEK_API_KEY;
+
+  let modelId: string;
+  let thinkingLevel: ThinkingLevel;
+
+  if (isDeepSeek) {
+    if (isChildTask) {
+      // Child task: default to flash max (fast + reasons), or agent override.
+      const agentChildMode = agentName
+        ? AGENTS[agentName as keyof typeof AGENTS]?.deepseekChildMode
+        : undefined;
+      const effectiveMode = agentChildMode ?? 'flash max';
+      const parsed = parseDeepSeekOperatingMode(effectiveMode);
+      modelId = parsed.modelId;
+      thinkingLevel = parsed.thinkingLevel;
+    } else {
+      // Main task: resolve the agent's native 6-mode execution state.
+      // Priority: agent definition → DEEPSEEK_MODE env override → default (pro max).
+      const agentMode = agentName
+        ? AGENTS[agentName as keyof typeof AGENTS]?.deepseekMode
+        : undefined;
+      const effectiveMode = agentMode
+        ?? (process.env.DEEPSEEK_MODE as DeepSeekExecutionState | undefined)
+        ?? 'pro max';
+      const parsed = parseDeepSeekOperatingMode(effectiveMode);
+      modelId = parsed.modelId;
+      thinkingLevel = parsed.thinkingLevel;
+    }
+  } else {
+    // Anthropic / Bedrock: standard tier-based resolution. Child tasks always use 'small'.
+    const effectiveTier = isChildTask ? 'small' : modelTier;
+    modelId = resolveModelId(effectiveTier);
+    thinkingLevel = resolveThinkingLevel(modelId);
+  }
 
   const authStorage = AuthStorage.inMemory();
   if (eff.providerId === 'anthropic' && eff.anthropicToken) {
@@ -144,7 +205,7 @@ export function resolveModelSelection(
 
   return {
     model,
-    thinkingLevel: resolveThinkingLevel(modelId),
+    thinkingLevel,
     authStorage,
     modelId,
     providerId: eff.providerId,

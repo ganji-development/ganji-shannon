@@ -13,16 +13,17 @@ import { requireInteractive } from '../tty.js';
 
 const SHANNON_HOME = path.join(os.homedir(), '.shannon');
 
-type Provider = 'anthropic' | 'custom_base_url' | 'bedrock';
+type Provider = 'anthropic' | 'deepseek' | 'custom_base_url' | 'bedrock';
 
 export async function setup(): Promise<void> {
-  requireInteractive('setup', 'For non-interactive use, export credentials as env vars (e.g. ANTHROPIC_API_KEY).');
+  requireInteractive('setup', 'For non-interactive use, export credentials as env vars (e.g. DEEPSEEK_API_KEY or ANTHROPIC_API_KEY).');
   p.intro('Shannon Setup');
 
   // 1. Select provider
   const provider = await p.select({
     message: 'Select your AI provider',
     options: [
+      { value: 'deepseek' as const, label: 'DeepSeek V4 Direct', hint: 'deepseek-v4-flash & deepseek-v4-pro' },
       { value: 'anthropic' as const, label: 'Claude Direct', hint: 'recommended' },
       { value: 'custom_base_url' as const, label: 'Custom Base URL', hint: 'proxies, gateways' },
       { value: 'bedrock' as const, label: 'Claude via AWS Bedrock' },
@@ -45,6 +46,8 @@ export async function setup(): Promise<void> {
 
 async function setupProvider(provider: Provider): Promise<ShannonConfig> {
   switch (provider) {
+    case 'deepseek':
+      return setupDeepSeek();
     case 'anthropic':
       return setupAnthropic();
     case 'custom_base_url':
@@ -55,6 +58,37 @@ async function setupProvider(provider: Provider): Promise<ShannonConfig> {
 }
 
 // === Provider Setup Flows ===
+
+async function setupDeepSeek(): Promise<ShannonConfig> {
+  const apiKey = await promptSecret('Enter your DeepSeek API key');
+
+  const baseUrl = await p.text({
+    message: 'DeepSeek API base URL',
+    initialValue: 'https://api.deepseek.com/anthropic',
+    validate: (value) => {
+      if (!value) return 'Base URL is required';
+      try {
+        new URL(value);
+      } catch {
+        return 'Must be a valid URL';
+      }
+      return undefined;
+    },
+  });
+  if (p.isCancel(baseUrl)) return cancelAndExit();
+
+  p.log.info(
+    'Each agent dynamically selects its optimal DeepSeek mode from the 6 operational modes:\n' +
+    '  flash off, flash high, flash max, pro off, pro high, pro max',
+  );
+
+  return {
+    anthropic: {
+      api_key: apiKey,
+      base_url: baseUrl,
+    },
+  };
+}
 
 async function setupAnthropic(): Promise<ShannonConfig> {
   const authMethod = await p.select({

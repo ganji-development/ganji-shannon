@@ -18,15 +18,18 @@
  *   WORKSPACES_DIR - Override workspaces directory (default: ./workspaces)
  */
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { WORKSPACES_DIR as DEFAULT_WORKSPACES_DIR, resolveSessionJsonPath } from '../paths.js';
+import fs from "node:fs/promises";
+import path from "node:path";
+import {
+  WORKSPACES_DIR as DEFAULT_WORKSPACES_DIR,
+  resolveSessionJsonPath,
+} from "../paths.js";
 
 interface SessionJson {
   session: {
     id: string;
     webUrl: string;
-    status: 'in-progress' | 'completed' | 'failed';
+    status: "in-progress" | "completed" | "failed";
     createdAt: string;
     completedAt?: string;
   };
@@ -38,7 +41,7 @@ interface SessionJson {
 interface WorkspaceInfo {
   name: string;
   url: string;
-  status: 'in-progress' | 'completed' | 'failed';
+  status: "in-progress" | "completed" | "failed";
   createdAt: Date;
   completedAt: Date | null;
   costUsd: number;
@@ -74,8 +77,8 @@ async function listWorkspaces(): Promise<void> {
   try {
     entries = await fs.readdir(workspacesDir);
   } catch {
-    console.log('No workspaces directory found.');
-    console.log(`Expected: ${workspacesDir}`);
+    console.info("No workspaces directory found.");
+    console.info(`Expected: ${workspacesDir}`);
     return;
   }
 
@@ -84,7 +87,7 @@ async function listWorkspaces(): Promise<void> {
   for (const entry of entries) {
     const sessionPath = resolveSessionJsonPath(path.join(workspacesDir, entry));
     try {
-      const content = await fs.readFile(sessionPath, 'utf8');
+      const content = await fs.readFile(sessionPath, "utf8");
       const data = JSON.parse(content) as SessionJson;
 
       workspaces.push({
@@ -92,7 +95,9 @@ async function listWorkspaces(): Promise<void> {
         url: data.session.webUrl,
         status: data.session.status,
         createdAt: new Date(data.session.createdAt),
-        completedAt: data.session.completedAt ? new Date(data.session.completedAt) : null,
+        completedAt: data.session.completedAt
+          ? new Date(data.session.completedAt)
+          : null,
         costUsd: data.metrics.total_cost_usd,
       });
     } catch {
@@ -101,15 +106,15 @@ async function listWorkspaces(): Promise<void> {
   }
 
   if (workspaces.length === 0) {
-    console.log('\nNo workspaces found.');
-    console.log('Run a pipeline first: ./shannon start -u <url> -r <repo>');
+    console.info("\nNo workspaces found.");
+    console.info("Run a pipeline first: ./shannon start -u <url> -r <repo>");
     return;
   }
 
   // Sort by creation date (most recent first)
   workspaces.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-  console.log('\n=== Shannon Workspaces ===\n');
+  console.info("\n=== Shannon Workspaces ===\n");
 
   // Column widths
   const nameWidth = 30;
@@ -119,15 +124,17 @@ async function listWorkspaces(): Promise<void> {
   const costWidth = 10;
 
   // Header
-  console.log(
-    '  ' +
-      'WORKSPACE'.padEnd(nameWidth) +
-      'URL'.padEnd(urlWidth) +
-      'STATUS'.padEnd(statusWidth) +
-      'DURATION'.padEnd(durationWidth) +
-      'COST'.padEnd(costWidth),
+  console.info(
+    "  " +
+      "WORKSPACE".padEnd(nameWidth) +
+      "URL".padEnd(urlWidth) +
+      "STATUS".padEnd(statusWidth) +
+      "DURATION".padEnd(durationWidth) +
+      "COST".padEnd(costWidth),
   );
-  console.log(`  ${'\u2500'.repeat(nameWidth + urlWidth + statusWidth + durationWidth + costWidth)}`);
+  console.info(
+    `  ${"\u2500".repeat(nameWidth + urlWidth + statusWidth + durationWidth + costWidth)}`,
+  );
 
   let resumableCount = 0;
 
@@ -137,16 +144,16 @@ async function listWorkspaces(): Promise<void> {
     const durationMs = endTime.getTime() - ws.createdAt.getTime();
     const duration = formatDuration(durationMs);
     const cost = `$${ws.costUsd.toFixed(2)}`;
-    const isResumable = ws.status !== 'completed';
+    const isResumable = ws.status !== "completed";
 
     if (isResumable) {
       resumableCount++;
     }
 
-    const resumeTag = isResumable ? ' (resumable)' : '';
+    const resumeTag = isResumable ? " (resumable)" : "";
 
-    console.log(
-      '  ' +
+    console.info(
+      "  " +
         truncate(ws.name, nameWidth - 2).padEnd(nameWidth) +
         truncate(ws.url, urlWidth - 2).padEnd(urlWidth) +
         getStatusDisplay(ws.status).padEnd(statusWidth) +
@@ -156,19 +163,20 @@ async function listWorkspaces(): Promise<void> {
     );
   }
 
-  console.log();
-  const summary = `${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'} found`;
-  const resumeSummary = resumableCount > 0 ? ` (${resumableCount} resumable)` : '';
-  console.log(`${summary}${resumeSummary}`);
+  console.info();
+  const summary = `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"} found`;
+  const resumeSummary =
+    resumableCount > 0 ? ` (${resumableCount} resumable)` : "";
+  console.info(`${summary}${resumeSummary}`);
 
   if (resumableCount > 0) {
-    console.log('\nResume with: ./shannon start -u <url> -r <repo> -w <name>');
+    console.info("\nResume with: ./shannon start -u <url> -r <repo> -w <name>");
   }
 
-  console.log();
+  console.info();
 }
 
 listWorkspaces().catch((err) => {
-  console.error('Error listing workspaces:', err);
+  console.error("Error listing workspaces:", err);
   process.exit(1);
 });

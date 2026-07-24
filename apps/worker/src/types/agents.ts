@@ -42,6 +42,14 @@ export type AgentValidator = (sourceDir: string, logger: ActivityLogger) => Prom
 
 export type AgentStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'rolled-back';
 
+export type DeepSeekExecutionState =
+  | 'flash off'
+  | 'flash high'
+  | 'flash max'
+  | 'pro off'
+  | 'pro high'
+  | 'pro max';
+
 export interface AgentDefinition {
   name: AgentName;
   displayName: string;
@@ -49,6 +57,8 @@ export interface AgentDefinition {
   promptTemplate: string;
   deliverableFilename: string;
   modelTier?: 'small' | 'medium' | 'large';
+  deepseekMode?: DeepSeekExecutionState;
+  deepseekChildMode?: DeepSeekExecutionState;
 }
 
 /**

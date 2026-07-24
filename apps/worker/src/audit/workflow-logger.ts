@@ -87,6 +87,11 @@ export class WorkflowLogger {
       `Started:     ${formatTimestamp()}`,
     ];
 
+    // Surface DeepSeek 6-mode execution when active.
+    if (process.env.DEEPSEEK_API_KEY) {
+      lines.push(`Provider:    DeepSeek V4 (6-mode per-agent execution)`);
+    }
+
     // Surface Fable usage: its safety classifiers route cybersecurity tasks to
     // Opus 4.8, so those phases run on Opus 4.8 regardless of the tier setting.
     const fableTiers = (['small', 'medium', 'large'] as const)

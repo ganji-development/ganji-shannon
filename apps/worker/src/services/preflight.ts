@@ -34,7 +34,7 @@ import {
   SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { glob } from 'zx';
-import { resolveEffectiveProvider, resolveModelId } from '../ai/models.js';
+import { parseDeepSeekOperatingMode, resolveEffectiveProvider, resolveModelId } from '../ai/models.js';
 import { parseConfig } from '../config-parser.js';
 import type { ActivityLogger } from '../types/activity-logger.js';
 import type { Config, Rule } from '../types/config.js';
@@ -280,11 +280,14 @@ async function probeCredentialsWithPi(
   const authStorage = AuthStorage.inMemory();
   if (token) authStorage.setRuntimeApiKey('anthropic', token);
 
-  const baseModel = ModelRegistry.create(authStorage).find('anthropic', resolveModelId('small'));
+  const probeModelId = process.env.DEEPSEEK_API_KEY
+    ? parseDeepSeekOperatingMode('flash off').modelId
+    : resolveModelId('small');
+  const baseModel = ModelRegistry.create(authStorage).find('anthropic', probeModelId);
   if (!baseModel) {
     return err(
       new PentestError(
-        `Model not found in pi registry: ${resolveModelId('small')}`,
+        `Model not found in pi registry: ${probeModelId}`,
         'config',
         false,
         {},
