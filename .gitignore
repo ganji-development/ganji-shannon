@@ -3,5 +3,9 @@ node_modules/
 workspaces/
 credentials/
 dist/
-repos/
+repos/*
 .turbo/
+
+.claude/
+graphify-out/
+.graphifyignore
