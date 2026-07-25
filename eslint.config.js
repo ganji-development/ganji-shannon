@@ -5,7 +5,7 @@ import globals from "globals";
 export default [
   {
     ignores: [
-      "dist/**",
+      "**/dist/**",
       "node_modules/**",
       "prisma.config.ts",
       "graphify-out/**",
