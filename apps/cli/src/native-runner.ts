@@ -47,10 +47,16 @@ export async function ensureNativeTemporal(): Promise<void> {
   try {
     execFileSync('temporal', ['--version'], { stdio: 'pipe' });
   } catch {
-    console.error('ERROR: `temporal` CLI not found.');
-    console.error('Install it: https://docs.temporal.io/cli#installation');
-    console.error('  e.g. on Kali/Debian:');
-    console.error('    curl -sSf https://temporal.download/cli/install | sh');
+    console.error('ERROR: `temporal` CLI not found. Install it then re-run.');
+    console.error('');
+    console.error('  Option 1 — Homebrew:');
+    console.error('    brew install temporal');
+    console.error('');
+    console.error('  Option 2 — GitHub release (any Linux, no brew):');
+    console.error('    ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m | sed s/x86_64/amd64/)');
+    console.error('    curl -LO "https://github.com/temporalio/cli/releases/latest/download/temporal_cli_linux_${ARCH}.tar.gz"');
+    console.error('    tar xzf temporal_cli_linux_${ARCH}.tar.gz');
+    console.error('    sudo install -m 755 temporal /usr/local/bin/temporal');
     process.exit(1);
   }
 

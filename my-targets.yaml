@@ -75,7 +75,7 @@ rules_of_engagement: |
   - Cap login attempts at 5 per account — no brute force.
   - Admin targets require authenticated sessions; document any auth bypass found.
 
-  Data:
+  Data handling:
   - Do not retain real user data in deliverables — use placeholders.
   - Proof-of-concept screenshots only; no persistent backdoors.
 
