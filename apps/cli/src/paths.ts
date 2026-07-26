@@ -124,7 +124,14 @@ export function readFirstTarget(configPath: string): { url: string; repoPath: st
     const url = typeof first['url'] === 'string' ? first['url'] : null;
     const repoPath = typeof first['repo_path'] === 'string' ? first['repo_path'] : null;
     if (!url) return null;
-    return { url, repoPath: repoPath ?? '' };
+    // Prefix relative paths with "./" so resolveRepo() treats them as explicit
+    // relative paths rather than bare names (which it would expand to ./repos/<name>).
+    const normalizedRepo = repoPath
+      ? repoPath.startsWith('/') || repoPath.startsWith('.')
+        ? repoPath
+        : `./${repoPath}`
+      : '';
+    return { url, repoPath: normalizedRepo };
   } catch {
     return null;
   }
