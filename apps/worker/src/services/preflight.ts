@@ -280,14 +280,19 @@ async function probeCredentialsWithPi(
   const authStorage = AuthStorage.inMemory();
   if (token) authStorage.setRuntimeApiKey('anthropic', token);
 
-  const probeModelId = process.env.DEEPSEEK_API_KEY
+  // For DeepSeek: the pi registry only knows Anthropic model IDs. Grab any registered
+  // Anthropic model as a structural template, then override the model ID so DeepSeek's
+  // Anthropic-compatible endpoint receives the correct model name in the request body.
+  const isDeepSeek = !!process.env.DEEPSEEK_API_KEY;
+  const probeModelId = isDeepSeek
     ? parseDeepSeekOperatingMode('flash off').modelId
     : resolveModelId('small');
-  const baseModel = ModelRegistry.create(authStorage).find('anthropic', probeModelId);
+  const templateModelId = isDeepSeek ? 'claude-haiku-4-5-20251001' : probeModelId;
+  const baseModel = ModelRegistry.create(authStorage).find('anthropic', templateModelId);
   if (!baseModel) {
     return err(
       new PentestError(
-        `Model not found in pi registry: ${probeModelId}`,
+        `Model not found in pi registry: ${templateModelId}`,
         'config',
         false,
         {},
@@ -295,7 +300,9 @@ async function probeCredentialsWithPi(
       ),
     );
   }
-  const model = baseUrl ? { ...baseModel, baseUrl } : baseModel;
+  // Override the model ID with the actual DeepSeek model ID (or keep as-is for Anthropic).
+  const resolvedModel = isDeepSeek ? { ...baseModel, id: probeModelId } : baseModel;
+  const model = baseUrl ? { ...resolvedModel, baseUrl } : resolvedModel;
 
   let errText: string | undefined;
   try {
@@ -368,7 +375,7 @@ async function validateCredentials(logger: ActivityLogger): Promise<Result<void,
   if (!eff.anthropicToken) {
     return err(
       new PentestError(
-        'No API credentials found. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN in .env (or use CLAUDE_CODE_USE_BEDROCK=1 for AWS Bedrock)',
+        'No API credentials found. Set DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, or CLAUDE_CODE_OAUTH_TOKEN in .env (or CLAUDE_CODE_USE_BEDROCK=1 for AWS Bedrock)',
         'config',
         false,
         {},

@@ -195,13 +195,24 @@ export function resolveModelSelection(
   }
 
   const registry = registryFactory(authStorage);
-  const found = registry.find(eff.providerId, modelId);
-  if (!found) {
-    throw new Error(`Model not found in pi registry: provider="${eff.providerId}" model="${modelId}"`);
-  }
 
-  // Custom base URL: override the resolved model's endpoint.
-  const model: Model<Api> = eff.baseUrl ? { ...found, baseUrl: eff.baseUrl } : found;
+  let model: Model<Api>;
+  if (isDeepSeek) {
+    // The pi registry only knows Anthropic model IDs. Use a known model as a structural
+    // template, then override its id so DeepSeek's endpoint receives the right model name.
+    const template = registry.find(eff.providerId, 'claude-haiku-4-5-20251001');
+    if (!template) {
+      throw new Error(`Model not found in pi registry: provider="${eff.providerId}" model="claude-haiku-4-5-20251001"`);
+    }
+    const withId = { ...template, id: modelId };
+    model = eff.baseUrl ? { ...withId, baseUrl: eff.baseUrl } : withId;
+  } else {
+    const found = registry.find(eff.providerId, modelId);
+    if (!found) {
+      throw new Error(`Model not found in pi registry: provider="${eff.providerId}" model="${modelId}"`);
+    }
+    model = eff.baseUrl ? { ...found, baseUrl: eff.baseUrl } : found;
+  }
 
   return {
     model,
