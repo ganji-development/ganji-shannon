@@ -40,6 +40,10 @@ function blockSudo(): void {
   process.exit(1);
 }
 
+function showHelp(): void {
+  const mode = getMode();
+  const prefix = mode === "local" ? "./shannon" : "npx @keygraph/shannon";
+
   console.info(`
 Shannon - AI Penetration Testing Framework
 
