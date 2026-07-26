@@ -14,7 +14,7 @@ import {
   randomSuffix,
   spawnWorker,
 } from "../docker.js";
-import { spawnNativeWorker } from "../native-runner.js";
+import { ensureNativeTemporal, spawnNativeWorker, stopNativeTemporal } from "../native-runner.js";
 import { buildEnvFlags, loadEnv, validateCredentials } from "../env.js";
 import { getWorkspacesDir, initHome } from "../home.js";
 import { isLocal } from "../mode.js";
@@ -93,8 +93,10 @@ export async function start(args: StartArgs): Promise<void> {
     fs.chmodSync(workspacesDir, 0o777);
   }
 
-  // 5. Ensure image and infra — Docker only
-  if (!args.native) {
+  // 5. Ensure Temporal + image/infra
+  if (args.native) {
+    await ensureNativeTemporal();
+  } else {
     ensureImage(args.version);
     await ensureInfra();
   }
@@ -276,8 +278,9 @@ export async function start(args: StartArgs): Promise<void> {
         printDebugHint(containerName);
       }
     } else {
-      // Native: kill the child process directly
+      // Native: kill the worker and the Temporal server we started
       proc.kill("SIGTERM");
+      stopNativeTemporal();
     }
   };
 
