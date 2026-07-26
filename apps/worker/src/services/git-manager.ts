@@ -205,7 +205,16 @@ export async function executeGitCommandWithRetry(
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const [cmd, ...args] = commandArgs;
-      const result = await $`cd ${sourceDir} && ${cmd} ${args}`;
+      // Provide a fallback git identity via env vars so commits work on hosts
+      // without a global git config (CI, fresh Kali installs, Docker builds).
+      // User-configured env vars always take precedence.
+      const gitEnv = {
+        GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME ?? 'Shannon',
+        GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL ?? 'shannon@localhost',
+        GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME ?? 'Shannon',
+        GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL ?? 'shannon@localhost',
+      };
+      const result = await $({ env: { ...process.env, ...gitEnv } })`cd ${sourceDir} && ${cmd} ${args}`;
       return result;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);

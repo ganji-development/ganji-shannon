@@ -609,18 +609,6 @@ export async function initDeliverableGit(input: ActivityInput): Promise<void> {
   }
 
   await executeGitCommandWithRetry(['git', 'init'], deliverablesPath, 'init deliverables repo');
-  // Set a local identity so the initial commit works even without a global git config.
-  // Scoped to this repo only (no --global).
-  await executeGitCommandWithRetry(
-    ['git', 'config', 'user.email', 'shannon@localhost'],
-    deliverablesPath,
-    'set local git email',
-  );
-  await executeGitCommandWithRetry(
-    ['git', 'config', 'user.name', 'Shannon'],
-    deliverablesPath,
-    'set local git name',
-  );
   await executeGitCommandWithRetry(
     ['git', 'commit', '--allow-empty', '-m', '📍 Initial deliverables checkpoint'],
     deliverablesPath,
