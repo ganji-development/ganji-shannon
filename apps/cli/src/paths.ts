@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { load as loadYaml } from 'js-yaml';
 import { isLocal } from './mode.js';
 
 export interface MountPair {
@@ -107,4 +108,24 @@ export function resolveConfig(configArg: string): MountPair {
     hostPath,
     containerPath: `/app/configs/${basename}`,
   };
+}
+/**
+ * Read a config YAML and return the first target's url and repo_path.
+ * Used so -u / -r can be omitted when -c fully specifies the topology.
+ */
+export function readFirstTarget(configPath: string): { url: string; repoPath: string } | null {
+  try {
+    const raw = fs.readFileSync(configPath, 'utf-8');
+    const parsed = loadYaml(raw) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const targets = parsed['targets'];
+    if (!Array.isArray(targets) || targets.length === 0) return null;
+    const first = targets[0] as Record<string, unknown>;
+    const url = typeof first['url'] === 'string' ? first['url'] : null;
+    const repoPath = typeof first['repo_path'] === 'string' ? first['repo_path'] : null;
+    if (!url) return null;
+    return { url, repoPath: repoPath ?? '' };
+  } catch {
+    return null;
+  }
 }

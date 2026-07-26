@@ -85,14 +85,19 @@ export async function start(args: StartArgs): Promise<void> {
   const repo = resolveRepo(args.repo);
   const config = args.config ? resolveConfig(args.config) : undefined;
 
-  // 4. Ensure workspaces dir is writable by container user (UID 1001)
+  // 4. Ensure workspaces dir exists
   const workspacesDir = getWorkspacesDir();
   fs.mkdirSync(workspacesDir, { recursive: true });
-  fs.chmodSync(workspacesDir, 0o777);
+  // chmod 0o777 is only needed for container user (UID 1001) in Docker mode
+  if (!args.native) {
+    fs.chmodSync(workspacesDir, 0o777);
+  }
 
-  // 5. Ensure image (auto-build in dev, pull in npx) and start infra
-  ensureImage(args.version);
-  await ensureInfra();
+  // 5. Ensure image and infra — Docker only
+  if (!args.native) {
+    ensureImage(args.version);
+    await ensureInfra();
+  }
 
   // 6. Generate unique task queue and container name
   const suffix = randomSuffix();
@@ -104,33 +109,37 @@ export async function start(args: StartArgs): Promise<void> {
     args.workspace ??
     `${new URL(args.url).hostname.replace(/[^a-zA-Z0-9-]/g, "-")}_shannon-${Date.now()}`;
 
-  // 8. Create writable overlay directories (mounted over :ro repo paths inside container)
-  // The run dir and its INTERNAL_DIR must be 0o777 so the container user can create audit
-  // subdirs and the overlay backing dirs.
+  // 8. Create workspace directories.
+  // In Docker mode: 0o777 so container user (UID 1001) can write; overlay dirs needed.
+  // In native mode: standard dirs, no chmod override, no overlay mount points needed.
   const workspacePath = path.join(workspacesDir, workspace);
   const internalPath = path.join(workspacePath, INTERNAL_DIR);
   fs.mkdirSync(workspacePath, { recursive: true });
-  fs.chmodSync(workspacePath, 0o777);
   migrateLegacyWorkspaceLayout(workspacePath);
   fs.mkdirSync(internalPath, { recursive: true });
-  fs.chmodSync(internalPath, 0o777);
   for (const dir of [
     "deliverables",
     "scratchpad",
     ".playwright-cli",
     ".playwright",
   ]) {
-    const dirPath = path.join(internalPath, dir);
-    fs.mkdirSync(dirPath, { recursive: true });
-    fs.chmodSync(dirPath, 0o777);
+    fs.mkdirSync(path.join(internalPath, dir), { recursive: true });
   }
 
-  // 9. Pre-create overlay mount points (:ro mounts can't auto-create them)
-  const shannonDir = path.join(repo.hostPath, ".shannon");
-  for (const dir of ["deliverables", "scratchpad", ".playwright-cli"]) {
-    fs.mkdirSync(path.join(shannonDir, dir), { recursive: true });
+  if (!args.native) {
+    // Docker only: chmod 0o777 for container user + pre-create overlay mount points
+    fs.chmodSync(workspacePath, 0o777);
+    fs.chmodSync(internalPath, 0o777);
+    for (const dir of ["deliverables", "scratchpad", ".playwright-cli", ".playwright"]) {
+      fs.chmodSync(path.join(internalPath, dir), 0o777);
+    }
+    // 9. Pre-create overlay mount points (:ro mounts can't auto-create them)
+    const shannonDir = path.join(repo.hostPath, ".shannon");
+    for (const dir of ["deliverables", "scratchpad", ".playwright-cli"]) {
+      fs.mkdirSync(path.join(shannonDir, dir), { recursive: true });
+    }
+    fs.mkdirSync(path.join(repo.hostPath, ".playwright"), { recursive: true });
   }
-  fs.mkdirSync(path.join(repo.hostPath, ".playwright"), { recursive: true });
 
   // 10. Resolve output directory
   const outputDir = args.output ? path.resolve(args.output) : undefined;
@@ -249,20 +258,26 @@ export async function start(args: StartArgs): Promise<void> {
     if (animate) process.stdout.write(".");
   }, 2000);
 
-  // Stop the worker container only if it hasn't started yet
+  // Stop the worker only if it hasn't started yet
   let cleaned = false;
   const cleanup = (): void => {
     if (cleaned || started) return;
     cleaned = true;
     clearInterval(pollInterval);
     console.info("\nStopping scan...");
-    try {
-      execFileSync("docker", ["stop", containerName], { stdio: "pipe" });
-    } catch {
-      // Container may have already exited
-    }
-    if (args.debug) {
-      printDebugHint(containerName);
+    if (!args.native) {
+      // Docker only: stop the container
+      try {
+        execFileSync("docker", ["stop", containerName], { stdio: "pipe" });
+      } catch {
+        // Container may have already exited
+      }
+      if (args.debug) {
+        printDebugHint(containerName);
+      }
+    } else {
+      // Native: kill the child process directly
+      proc.kill("SIGTERM");
     }
   };
 

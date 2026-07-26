@@ -22,6 +22,9 @@ const FORWARD_VARS = [
   'ANTHROPIC_MEDIUM_MODEL',
   'ANTHROPIC_LARGE_MODEL',
   'CLAUDE_ADAPTIVE_THINKING',
+  // DeepSeek direct API (Anthropic-compatible endpoint)
+  'DEEPSEEK_API_KEY',
+  'DEEPSEEK_BASE_URL',
 ] as const;
 
 /**
@@ -57,7 +60,7 @@ export function buildEnvFlags(): string[] {
 interface CredentialValidation {
   valid: boolean;
   error?: string;
-  mode: 'api-key' | 'oauth' | 'custom-base-url' | 'bedrock';
+  mode: 'api-key' | 'oauth' | 'custom-base-url' | 'bedrock' | 'deepseek';
 }
 
 /** Check if a custom Anthropic-compatible base URL is configured. */
@@ -68,6 +71,7 @@ function isCustomBaseUrlConfigured(): boolean {
 /** Detect which providers are configured via environment variables. */
 function detectProviders(): string[] {
   const providers: string[] = [];
+  if (process.env.DEEPSEEK_API_KEY) providers.push('DeepSeek API key');
   if (process.env.ANTHROPIC_API_KEY) providers.push('Anthropic API key');
   if (process.env.CLAUDE_CODE_OAUTH_TOKEN) providers.push('Anthropic OAuth');
   if (isCustomBaseUrlConfigured()) providers.push('Custom Base URL');
@@ -87,6 +91,11 @@ export function validateCredentials(): CredentialValidation {
       mode: 'api-key',
       error: `Multiple providers detected: ${providers.join(', ')}. Only one provider can be active at a time.`,
     };
+  }
+
+  // DeepSeek direct API — agents select their own mode natively from AGENTS registry
+  if (process.env.DEEPSEEK_API_KEY) {
+    return { valid: true, mode: 'deepseek' };
   }
 
   if (process.env.ANTHROPIC_API_KEY) {

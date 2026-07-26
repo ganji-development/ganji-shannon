@@ -1,0 +1,123 @@
+# Ganji Multi-Target Pentest Configuration
+#
+# Usage (from the shannon repo root):
+#   ./shannon start --native -c my-targets.yaml
+#   ./shannon start --native -c my-targets.yaml -w q1-audit   # named workspace
+#
+# Credentials are loaded from .env automatically.
+# The first target is the primary scan entry point; all targets are analysed.
+
+description: >
+  Full-stack Ganji platform on shared VPS: song generator, image generator,
+  gigapixel image tool, OAuth backend, wallet service. Node.js / Next.js apps.
+  Internal services (OAuth :3001, Wallet :8080) are loopback-only — not directly
+  reachable from outside. Shannon analyses them via static code review of their
+  source and hunts for SSRF vectors in public/admin apps that could pivot to them.
+
+# ─── Target topology ──────────────────────────────────────────────────────────
+targets:
+  # ── Public-facing (2 URL-based) ────────────────────────────────────────────
+  - name: ganji.one
+    url: https://ganji.one
+    tier: public
+    repo_path: repos/ganji.one
+
+  - name: gigapixel
+    url: https://gigapixel.ganji.one
+    tier: public
+    repo_path: repos/ganji-gigapixel
+
+  # ── Admin / owner-restricted (2 URL-based) ─────────────────────────────────
+  - name: songgenerator-admin
+    url: https://songgenerator.ganjidevelopment.com
+    tier: admin
+    repo_path: repos/ganji-songgenerator
+
+  - name: imagegenerator-admin
+    url: https://imagegenerator.ganjidevelopment.com
+    tier: admin
+    repo_path: repos/ganji-image-generator
+
+  # ── Internal VPS services (2 IP-only, loopback-only) ───────────────────────
+  # Not reachable from outside — by design. Shannon analyses these via:
+  #   1. Static code review of repo_path source
+  #   2. SSRF pivot vectors found in the public/admin apps above
+  - name: oauth-internal
+    url: http://127.0.0.1:3001
+    tier: internal
+    repo_path: repos/ganji-oauth
+
+  - name: wallet-internal
+    url: http://127.0.0.1:8080
+    tier: internal
+    repo_path: repos/wallet
+
+# ─── Vulnerability classes ────────────────────────────────────────────────────
+# All five run by default. Uncomment to restrict:
+# vuln_classes: [injection, xss, auth, authz, ssrf]
+
+# ─── Exploitation phase ───────────────────────────────────────────────────────
+exploit: "true"
+
+# ─── Rules of engagement ──────────────────────────────────────────────────────
+rules_of_engagement: |
+  Authorized self-pentest of Ganji-owned infrastructure.
+  All targets are owned and operated by the tester.
+
+  Internal services (oauth-internal, wallet-internal) bind to VPS loopback only.
+  Do not attempt live HTTP connections to 127.0.0.1 from outside the VPS.
+  Instead: analyse their source code for vulnerabilities, and test whether
+  any public or admin endpoint can be abused as an SSRF pivot to reach them.
+
+  Operational:
+  - Throttle to under 10 requests/second per endpoint.
+  - Back off 60 seconds on any 429 or 503 response.
+  - Cap login attempts at 5 per account — no brute force.
+  - Admin targets require authenticated sessions; document any auth bypass found.
+
+  Data:
+  - Do not retain real user data in deliverables — use placeholders.
+  - Proof-of-concept screenshots only; no persistent backdoors.
+
+# ─── Rules ────────────────────────────────────────────────────────────────────
+rules:
+  avoid:
+    - description: "Skip logout endpoints to avoid losing the test session"
+      type: url_path
+      value: "/logout"
+
+    - description: "Skip any destructive admin delete endpoints"
+      type: url_path
+      value: "/api/admin/delete"
+
+  focus:
+    - description: "OAuth callback and token exchange endpoints"
+      type: url_path
+      value: "/api/auth"
+
+    - description: "Song/image generation API endpoints"
+      type: url_path
+      value: "/api/generate"
+
+    - description: "Subscription and payment routes"
+      type: url_path
+      value: "/api/subscription"
+
+    - description: "Any server-side URL fetch or proxy endpoints — SSRF pivot candidates"
+      type: url_path
+      value: "/api/proxy"
+
+# ─── Report settings ──────────────────────────────────────────────────────────
+report:
+  min_severity: low
+  min_confidence: low
+  guidance: |
+    Include all findings across all 6 targets.
+    Group by tier: public first, then admin, then internal.
+    Flag any SSRF vector that could reach the internal loopback services as critical.
+    Flag any cross-target session/token sharing as critical.
+
+# ─── Pipeline settings ────────────────────────────────────────────────────────
+pipeline:
+  retry_preset: default
+  max_concurrent_pipelines: 5

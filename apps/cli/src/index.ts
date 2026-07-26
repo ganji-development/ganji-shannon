@@ -18,6 +18,7 @@ import { stop } from "./commands/stop.js";
 import { uninstall } from "./commands/uninstall.js";
 import { workspaces } from "./commands/workspaces.js";
 import { getMode } from "./mode.js";
+import { readFirstTarget } from "./paths.js";
 import { getVersion, getVersionLine } from "./version.js";
 
 function blockSudo(): void {
@@ -39,10 +40,6 @@ function blockSudo(): void {
   process.exit(1);
 }
 
-function showHelp(): void {
-  const mode = getMode();
-  const prefix = mode === "local" ? "./shannon" : "npx @keygraph/shannon";
-
   console.info(`
 Shannon - AI Penetration Testing Framework
 
@@ -52,7 +49,8 @@ Usage:${
       : `
   ${prefix} setup                                       Configure credentials`
   }
-  ${prefix} start --url <url> --repo <path> [options]   Start a pentest scan
+  ${prefix} start -c <config> [options]                  Start scan from config (all targets inside)
+  ${prefix} start --url <url> --repo <path> [options]    Start single-target scan
   ${prefix} stop [--clean] [--yes]                       Stop all running scans
   ${prefix} workspaces                                   List all workspaces
   ${prefix} logs <workspace>                             Show a scan's live log
@@ -67,17 +65,19 @@ Usage:${
   ${prefix} help                                         Show this help
 
 Options for 'start':
-  -u, --url <url>           Target URL (required)
-  -r, --repo <path>         Repository path${mode === "local" ? " or bare name" : ""} (required)
-  -c, --config <path>       Configuration file (YAML)
+  -c, --config <path>       Configuration file (YAML) — required, or use -u + -r
+  -u, --url <url>           Primary target URL (derived from config's first target if omitted)
+  -r, --repo <path>         Repository path${mode === "local" ? " or bare name" : ""} (derived from config's first target if omitted)
   -o, --output <path>       Copy deliverables to this directory after run
   -w, --workspace <name>    Named workspace (auto-resumes if exists)
+      --native              Run worker directly on host (no Docker)
       --pipeline-testing    Use minimal prompts for fast testing
       --debug               Preserve worker container after exit for log inspection
 
 Examples:
+  ${prefix} start --native -c my-targets.yaml
+  ${prefix} start --native -c my-targets.yaml -w q1-audit
   ${prefix} start -u https://example.com -r ${mode === "local" ? "my-repo" : "./my-repo"}
-  ${prefix} start -u https://example.com -r /path/to/repo -c config.yaml -w q1-audit
   ${prefix} logs q1-audit
   ${prefix} stop --clean
 ${
@@ -174,10 +174,22 @@ function parseStartArgs(argv: string[]): ParsedStartArgs {
     }
   }
 
+  // If -u / -r were not supplied, derive them from the first target in the config.
+  if ((!url || repos.length === 0) && config) {
+    const first = readFirstTarget(config);
+    if (first) {
+      if (!url) url = first.url;
+      if (repos.length === 0 && first.repoPath) {
+        repo = first.repoPath;
+        repos.push(first.repoPath);
+      }
+    }
+  }
+
   if (!url || repos.length === 0) {
-    console.error("ERROR: --url and at least one --repo are required");
+    console.error("ERROR: --url and --repo are required (or supply a -c config with a targets array)");
     console.error(
-      `Usage: ${getMode() === "local" ? "./shannon" : "npx @keygraph/shannon"} start -u <url> -r <path>`,
+      `Usage: ${getMode() === "local" ? "./shannon" : "npx @keygraph/shannon"} start -c my-targets.yaml --native`,
     );
     process.exit(1);
   }
