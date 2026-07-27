@@ -8,9 +8,47 @@ import { fs, path } from 'zx';
 import { PROMPTS_DIR } from '../paths.js';
 import { PLAYWRIGHT_SESSION_MAPPING } from '../session-manager.js';
 import type { ActivityLogger } from '../types/activity-logger.js';
-import type { Authentication, DistributedConfig, ReportConfig, Rule, VulnClass } from '../types/config.js';
+import type {
+  Authentication,
+  DistributedConfig,
+  ReportConfig,
+  Rule,
+  TargetEndpoint,
+  VulnClass,
+} from '../types/config.js';
 import { isGlobPattern } from '../utils/glob.js';
 import { handlePromptError, PentestError } from './error-handling.js';
+
+/**
+ * Renders the multi-target topology block. Lists every declared target with its tier, live URL,
+ * and source sub-directory (relative to the mounted repo root), then instructs the agent to test
+ * both each target and the interactions between them (shared sessions/tokens, cross-app trust,
+ * SSRF pivots into loopback-only internal services). Returns '' for single-target runs so the
+ * surrounding block is stripped.
+ */
+function renderTargetTopology(targets: TargetEndpoint[]): string {
+  if (targets.length === 0) return '';
+
+  const rows = targets.map((target) => {
+    const subdir = target.repo_path ? `${path.basename(target.repo_path)}/` : '(no source in this repo set)';
+    const loopbackNote =
+      target.tier === 'internal'
+        ? ' — loopback-only: do NOT open a direct external connection; assess it through source review and as an SSRF pivot target reached from the public/admin apps'
+        : '';
+    return `- ${target.name} [${target.tier}] — ${target.url} — source: ${subdir}${loopbackNote}`;
+  });
+
+  return [
+    'This engagement covers MULTIPLE interconnected targets that share infrastructure. Assess each',
+    'target AND how they interact: shared authentication and session tokens, cross-application trust',
+    'relationships, and SSRF pivots from the public/admin apps into the internal loopback services.',
+    'Every repository is mounted read-only under the repo path above; each target\'s source lives in',
+    'the sub-directory listed below.',
+    '',
+    'Targets:',
+    ...rows,
+  ].join('\n');
+}
 
 function renderCodePathRules(rules: Rule[]): string {
   const filtered = rules.filter((r) => r.type === 'code_path');
@@ -336,6 +374,13 @@ async function interpolateVariables(
     } else {
       result = replaceLiteral(result, /{{CODE_RULES_AVOID}}/g, renderCodePathRules(config?.avoid ?? []));
       result = replaceLiteral(result, /{{CODE_RULES_FOCUS}}/g, renderCodePathRules(config?.focus ?? []));
+    }
+
+    const targets = config?.targets ?? [];
+    if (targets.length === 0) {
+      result = result.replace(/<target_topology>[\s\S]*?<\/target_topology>\s*/g, '');
+    } else {
+      result = replaceLiteral(result, /{{TARGET_TOPOLOGY}}/g, renderTargetTopology(targets));
     }
 
     const roe = config?.rules_of_engagement?.trim() ?? '';

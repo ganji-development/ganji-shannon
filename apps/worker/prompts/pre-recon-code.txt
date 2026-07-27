@@ -29,6 +29,10 @@ Read `.gitignore` and run `git ls-files --others --ignored --exclude-standard --
 
 {{DESCRIPTION}}
 
+<target_topology>
+{{TARGET_TOPOLOGY}}
+</target_topology>
+
 <scope>
 Downstream vulnerability analysis will cover these classes: {{VULN_CLASSES_TESTED}}.
 </scope>

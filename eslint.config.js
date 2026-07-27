@@ -12,6 +12,7 @@ export default [
       "repos/**",
       "sample-reports/**",
       "workspaces/**",
+      ".remember/**",
     ],
   },
   js.configs.recommended,

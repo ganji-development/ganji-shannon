@@ -18,7 +18,7 @@ import { stop } from "./commands/stop.js";
 import { uninstall } from "./commands/uninstall.js";
 import { workspaces } from "./commands/workspaces.js";
 import { getMode } from "./mode.js";
-import { readFirstTarget } from "./paths.js";
+import { resolveMultiTarget } from "./paths.js";
 import { getVersion, getVersionLine } from "./version.js";
 
 function blockSudo(): void {
@@ -178,14 +178,16 @@ function parseStartArgs(argv: string[]): ParsedStartArgs {
     }
   }
 
-  // If -u / -r were not supplied, derive them from the first target in the config.
+  // If -u / -r were not supplied, derive them from the config's targets array. The primary
+  // URL is the first externally reachable target; the repo mount is the common parent of every
+  // target repo, so a single scan sees all repositories and can test how the targets interact.
   if ((!url || repos.length === 0) && config) {
-    const first = readFirstTarget(config);
-    if (first) {
-      if (!url) url = first.url;
-      if (repos.length === 0 && first.repoPath) {
-        repo = first.repoPath;
-        repos.push(first.repoPath);
+    const resolved = resolveMultiTarget(config);
+    if (resolved) {
+      if (!url) url = resolved.primaryUrl;
+      if (repos.length === 0 && resolved.repoArg) {
+        repo = resolved.repoArg;
+        repos.push(resolved.repoArg);
       }
     }
   }

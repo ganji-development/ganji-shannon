@@ -14,6 +14,10 @@ Your analysis must begin by reading and fully comprehending the initial intellig
 URL: {{WEB_URL}}
 {{DESCRIPTION}}
 
+<target_topology>
+{{TARGET_TOPOLOGY}}
+</target_topology>
+
 Filesystem:
 - {{REPO_PATH}}/ (read only)
 - {{REPO_PATH}}/.shannon/deliverables/ (read-write)

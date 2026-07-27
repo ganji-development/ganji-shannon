@@ -9,3 +9,4 @@ repos/*
 .claude/
 graphify-out/
 .graphifyignore
+Security-Assessment-Report.md

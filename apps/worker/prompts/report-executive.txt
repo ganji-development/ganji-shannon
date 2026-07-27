@@ -22,6 +22,10 @@ IMPORTANT: You are MODIFYING an existing file, not creating a new one.
 <target>
 URL: {{WEB_URL}}
 
+<target_topology>
+{{TARGET_TOPOLOGY}}
+</target_topology>
+
 Filesystem:
 - {{REPO_PATH}}/ (read only)
 - {{REPO_PATH}}/.shannon/deliverables/ (read-write)
